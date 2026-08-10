@@ -23,7 +23,7 @@ def main_():
             priv = obs.get("private", {})
             tiles = me["tiles"]
             counts = {}
-            empty = weed = locked = 0
+            empty = weed = locked = coop = birds = 0
             for row in tiles:
                 for t in row:
                     if t == "LOCKED":
@@ -31,17 +31,22 @@ def main_():
                     elif t is None:
                         empty += 1
                     elif isinstance(t, dict):
-                        if t.get("kind") == "WEED":
+                        if "animal" in t:
+                            birds += 1
+                        elif t.get("kind") in ("COOP", "PASTURE"):
+                            coop += 1
+                        elif t.get("kind") == "WEED":
                             weed += 1
                         elif t.get("kind") == "PLANT":
                             counts[t["crop"]] = counts.get(t["crop"], 0) + 1
             shed = {k: v for k, v in priv.get("shed", {}).items() if v}
             seeds = {k: v for k, v in priv.get("seeds", {}).items() if v}
             prices = {k: v for k, v in obs["market"]["prices"].items()
-                      if k in ("WHEAT", "CARROT", "MELON", "TOMATO", "STRAWBERRY")}
+                      if k in ("WHEAT", "MELON", "STRAWBERRY", "EGG", "FERTILIZER")}
             log.append(
                 f"D{obs['day']:2d} ${me['money']:>8,.0f} hands={len(me['hands']):>2} "
                 f"land={len(me['unlocked_quadrants'])} free={empty:>2} weed={weed:>2} "
+                f"birds={birds}/{birds + coop} "
                 f"plants={counts} seeds={seeds} shed={shed} px={prices}"
             )
         return result

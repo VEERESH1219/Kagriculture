@@ -7,21 +7,33 @@ over fixed seeds, not estimated.
 
 | Matchup | Games | Mean | Median | Min | Winrate |
 |---|---|---|---|---|---|
-| vs `random` | 16 | **$77,287** | $77,236 | $66,554 | 16/16 |
-| vs `pass` (deterministic, used for tuning) | 16 | $74,510 | $75,848 | $62,120 | 16/16 |
-| vs old **v12** agent, both seats | 20 | **$65,843** | $68,308 | $39,102 | 20/20 |
+| vs `random` | 16 | **$81,166** | $80,938 | $72,201 | 16/16 |
+| vs `pass` (deterministic, used for tuning) | 48 | $78,475 | $79,689 | $48,171 | 48/48 |
+| vs old **v12** agent, both seats | 20 | **$74,635** | $73,885 | $55,793 | 20/20 |
 
-Previous v12 baseline: **$4,464** mean vs `random`. Current agent is ~17x that.
+Previous v12 baseline: **$4,464** mean vs `random`. Current agent is ~18x that.
 Runtime is 4.6 ms/turn against a 1000 ms `actTimeout`, so there is a lot of
 compute headroom left.
+
+The gain over the v13 numbers is **mid-day porter runs** (`PORTER_FILL`), paired
+over 48 seeds vs `pass`: $78,475 with, $76,273 without — **+$2,202 mean, +$3,186
+median, +$4,624 on the minimum**. It helps the floor more than the mean because
+it bites exactly in the games where a day's production outruns the 100-item shed
+and the surplus was being discarded at end of day. Measure this one at n≥48: at
+n=16 the effect flipped sign between seed windows.
 
 ## Tooling
 
 - `bench.py` — parallel seeded benchmark. `uv run bench.py --opp pass -n 16 --swap`
 - `tune.py` — one-parameter sweep. `uv run tune.py MAX_UNITS 10 12 14`
 - `trace.py` — per-day trace of one episode. `uv run trace.py --seed 2003 --opp pass`
+- `actions.py` — where the crew's day goes, by op. `uv run actions.py --seed 2003`
 - `baselines/v12.py` — frozen old agent, for regression checks.
 - `KAG_DEBUG=1` disables `agent`'s try/except so exceptions surface.
+
+`actions.py` is the one to reach for when a change looks economically sound but
+does not pay. Movement is over half of every unit-action the agent issues, so a
+job that prices well per *action* can still lose once you count the walk to it.
 
 **Always tune against `pass`, not `random`.** The built-in `random_agent` calls
 `random.Random()` with no seed, which added ~3.5% run-to-run noise and drowned
@@ -104,11 +116,17 @@ wrapper. Each turn:
    never $100 strawberry) and "maximise return on land" (day 15: cash ample).
    This one change was worth **+$3.7k/game**.
 4. **Build a job list** priced in dollars — HARVEST, WATER (yield vs survival
-   valued separately), DIG, PLANT, DROP.
+   valued separately), DIG, PLANT, DROP, plus the (default-off) flock ops.
+   Each job carries a `need` (an item the unit must already hold, e.g. FEED
+   needs wheat), an optional `unit` pin, and a `key` naming what two jobs may
+   not share this turn. Crop ops key on the tile because they consume it;
+   animal ops key on `(tile, op)`, since one coop can be fed, cared for and
+   harvested by three different units in the same turn.
 5. **Assign** by ranking every (unit, job) pair on `value / (distance + 1)`, so
    a unit prefers a decent job at its feet to a great one across the farm.
+   Unit-pinned jobs are placed first and claim their key.
 6. **Market orders**, in resolution order: SELL (funds the rest) → BUY_LAND →
-   HIRE → BUY_SEED.
+   HIRE → BUY_ANIMAL → BUY_PRODUCT (feed) → BUY_SEED.
 
 Two invariants worth preserving:
 
@@ -131,25 +149,63 @@ Swept one at a time vs `pass`, 16 seeds. Current values in `main.py`:
 | `LAND_BUFFER` | 800 | 200→$50k (starves seeds); ≥400 all equal |
 | `RESERVE_FRAC` | 0.45 | no measurable effect — sell logic rarely binds |
 | `PLANTS_PER_UNIT` | 11 | no effect; capacity is not binding at 12 units |
+| `PORTER_FILL` | 0.6 | shed fill that starts mid-day drops; +$2,202 vs off (n=48) |
+| `MAX_GEESE` | 0 | flock off — see below; 4→−$10k, 8→−$17k, 16→−$25k |
 
 ## Next steps, highest expected value first
 
-1. **Goose / egg engine (Phase 4, not started).** EGG is `log`-priced and
-   effectively uncapped at ~$40. `FEED` + `CARE` yields **2 eggs/day/tile**
-   indefinitely (`max_held` caps unharvested product, not lifetime output),
-   costing 1 wheat/day. That is ~$80/tile-day versus wheat's ~$22 — second only
-   to melon, and unlike melon it does not saturate. Needs: `BUILD_COOP`,
-   `BUY_ANIMAL`, `PICKUP` at shed, `PLACE`, then daily FEED/CARE/HARVEST plus
-   `COLLECT_FERTILIZER`. This is the largest single remaining lever.
-2. **Land timing.** Quadrants 3 and 4 are still bought around day 11 because
-   cash is tied up in melon seeds until the day-10 harvest. Reserving toward the
-   next land price, or deferring melon, is probably worth several thousand.
-3. **Endgame seed waste.** Traces show ~13 melon seeds ($1,040) and 40+ idle
-   tiles still held on day 29. Stop buying seeds whose cycle cannot finish.
-4. **Mid-day porter runs.** Only the day-29 `DROP` is implemented. Producing
-   >100 units/day currently overflows the shed; ferrying to the shed mid-day
-   would lift the hard ~100 units/day ceiling.
-5. **Self-play validation.** Everything so far is measured against `random`,
+1. **Self-play validation.** Everything so far is measured against `random`,
    `pass`, and v12 — all of which barely touch the shared market. A real
    opponent competing for the same scarcity premiums will change crop
    valuations. Run `bench.py --agent main:agent --opp main.py --swap`.
+2. **Land timing.** Quadrants 3 and 4 are still bought around day 11 because
+   cash is tied up in melon seeds until the day-10 harvest. Reserving toward the
+   next land price, or deferring melon, is probably worth several thousand.
+3. **Cut the walking.** `actions.py` says **51.7%** of all unit-actions are
+   moves and another 11.5% are `PASS`. Assignment is greedy per turn and has no
+   notion of a route, so units criss-cross the farm. Servicing tiles in a sweep,
+   or biasing each unit toward a home region, is now the biggest lever on the
+   crop engine itself — and it is the precondition for the flock ever paying.
+4. **The panic-dump rule may be mispriced.** When `shed_fill + incoming >
+   SHED_CAP - 10`, `reserve_frac` drops to 0.05 and the agent sells anything at
+   almost any price. In flock traces this dumped melon at **$4** against a base
+   of $250. Overflow really is discarded, so the rule is right in principle, but
+   it should dump the *cheapest* items rather than everything.
+
+## Phase 4 (goose / egg engine): built, measured, switched off
+
+The husbandry is implemented and works — coops get built, birds bought, fetched
+from the shed, placed, fed, cared for, harvested, and their fertilizer
+collected. It is behind `MAX_GEESE`, which now **defaults to 0**. It loses money
+at every size tried (16 seeds vs `pass`):
+
+| `MAX_GEESE` | 0 | 4 | 8 | 16 |
+|---|---|---|---|---|
+| mean | **$79,472** | $69,309 | $62,858 | $54,027 |
+
+The previous handoff's case for it — "~$80/tile-day versus wheat's ~$22" — was
+arithmetic on *tiles*, and tiles are not the binding constraint; **unit-actions
+are**. A goose grosses ~$150/day (2 eggs at ~$42, 1 fertilizer at ~$70, less a
+$35 wheat), but collecting that takes FEED + CARE + COLLECT + half a HARVEST,
+each on the coop tile itself, with a walk between every one. At ~7 actions/day
+per bird, 16 birds eat well over half the crew's day, and traces show it still
+only managed to feed 7–11 of 16 birds daily.
+
+Engine facts established while building it, all still true and worth keeping:
+
+- `BUILD_COOP` is **free**; the $300 is the bird. It needs a `None` tile.
+- Animals produce **whether or not they are fed**. Feeding matters only for
+  survival (two consecutive dry nights and the bird escapes, structure intact)
+  and because the CARE bonus is only spent on a *fed* production night.
+- `FEED` takes wheat from the **unit's** inventory, not the shed — so every feed
+  cycle needs a `PICKUP` run first. This is what makes it so action-hungry.
+- `max_held` caps only *uncollected* product, so lifetime output is unbounded.
+- **FERTILIZER is in no shop's list and is excluded from the town centre**
+  (`TOWN_CENTER_PRODUCTS = [p for p in PRODUCTS if p != "FERTILIZER"]`). Its
+  inventory therefore only ever moves when we sell, making it a one-shot
+  ~$25k prize (price floors after ~495 units), exactly like melon.
+- `BUY_ANIMAL` lands the bird in the **shed**, where it occupies a slot against
+  the 100-item cap until a unit fetches it.
+
+If it is revisited, fix the walking first (item 3), then cluster coops into one
+adjacent block so a unit can service several birds without crossing the farm.
