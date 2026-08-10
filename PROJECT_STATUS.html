@@ -1,0 +1,453 @@
+<title>Kaggriculture — Status, Runbook &amp; Submission</title>
+<style>
+  :root {
+    --ground:   #F1F3EF;
+    --surface:  #FBFCFA;
+    --raised:   #E7EBE4;
+    --ink:      #151A16;
+    --muted:    #5A6659;
+    --faint:    #8C9789;
+    --rule:     #D3DACE;
+    --rule-firm:#B4BFB0;
+    --accent:   #2B6B4F;
+    --accent-sf:#DCEBE1;
+    --gain:     #2B6B4F;
+    --loss:     #A63D28;
+    --loss-sf:  #F5E2DC;
+    --gold:     #8A6612;
+    --gold-sf:  #F0E8CF;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0F1310;
+      --surface:  #161B17;
+      --raised:   #1E241F;
+      --ink:      #E4E9E2;
+      --muted:    #97A394;
+      --faint:    #6F7B6D;
+      --rule:     #28312A;
+      --rule-firm:#3A463C;
+      --accent:   #5FB88C;
+      --accent-sf:#172A20;
+      --gain:     #5FB88C;
+      --loss:     #D4735A;
+      --loss-sf:  #2C1A15;
+      --gold:     #C9A24A;
+      --gold-sf:  #2A2313;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0F1310;
+    --surface:  #161B17;
+    --raised:   #1E241F;
+    --ink:      #E4E9E2;
+    --muted:    #97A394;
+    --faint:    #6F7B6D;
+    --rule:     #28312A;
+    --rule-firm:#3A463C;
+    --accent:   #5FB88C;
+    --accent-sf:#172A20;
+    --gain:     #5FB88C;
+    --loss:     #D4735A;
+    --loss-sf:  #2C1A15;
+    --gold:     #C9A24A;
+    --gold-sf:  #2A2313;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 1.25rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 54rem; margin: 0 auto; }
+  .prose { max-width: 38rem; }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  header {
+    padding: 3.5rem 0 1.75rem;
+    border-bottom: 2px solid var(--ink);
+    display: flex; flex-direction: column; gap: 0.85rem;
+  }
+  .kicker {
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
+  }
+  h1 {
+    font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.08; font-weight: 700;
+    letter-spacing: -0.025em; margin: 0; text-wrap: balance;
+  }
+  .standfirst { color: var(--muted); font-size: 1.06rem; margin: 0; max-width: 34rem; }
+  .meta {
+    font-family: var(--mono); font-size: 0.78rem; color: var(--faint);
+    display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem;
+  }
+
+  /* ── sections ─────────────────────────────────────────── */
+  section { padding-top: 3.25rem; }
+  .eyebrow {
+    display: flex; align-items: baseline; gap: 0.9rem;
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+    margin-bottom: 1.4rem;
+  }
+  .eyebrow::after {
+    content: ""; flex: 1; height: 1px; background: var(--rule-firm);
+  }
+  h2 {
+    font-size: 1.6rem; font-weight: 700; letter-spacing: -0.018em;
+    margin: 0 0 0.7rem; text-wrap: balance;
+  }
+  h3 {
+    font-size: 1.06rem; font-weight: 700; letter-spacing: -0.008em;
+    margin: 2.2rem 0 0.6rem;
+  }
+  p { margin: 0 0 1rem; }
+  a { color: var(--accent); }
+  strong { font-weight: 700; }
+
+  code {
+    font-family: var(--mono); font-size: 0.855em;
+    background: var(--raised); padding: 0.12em 0.4em; border-radius: 3px;
+  }
+  pre {
+    font-family: var(--mono); font-size: 0.83rem; line-height: 1.7;
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--rule); border-left: 2px solid var(--accent);
+    padding: 0.95rem 1.1rem; overflow-x: auto; margin: 0 0 1rem;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .cmt { color: var(--faint); }
+
+  /* ── the one loud thing: what to upload ───────────────── */
+  .submit {
+    margin-top: 2rem; background: var(--surface);
+    border: 1px solid var(--rule-firm); border-top: 4px solid var(--accent);
+    padding: 1.6rem 1.5rem;
+  }
+  .submit-head {
+    display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+  }
+  .filename {
+    font-family: var(--mono); font-size: 1.45rem; font-weight: 700;
+    color: var(--accent); letter-spacing: -0.01em;
+  }
+  .submit-sub { color: var(--muted); font-size: 0.95rem; margin: 0 0 1.1rem; }
+  .checks { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
+  .checks li {
+    display: grid; grid-template-columns: 1.15rem 1fr; gap: 0.6rem;
+    font-size: 0.92rem; color: var(--muted); align-items: start;
+  }
+  .checks .tick { color: var(--gain); font-weight: 700; }
+
+  /* ── verdict chips ────────────────────────────────────── */
+  .verdict {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.11em; text-transform: uppercase;
+    padding: 0.28rem 0.6rem; border-radius: 2px; vertical-align: 0.22em;
+  }
+  .v-ship { background: var(--accent-sf); color: var(--accent); }
+  .v-cut  { background: var(--loss-sf);   color: var(--loss); }
+  .v-bug  { background: var(--gold-sf);   color: var(--gold); }
+
+  /* ── tables ───────────────────────────────────────────── */
+  .scroll { overflow-x: auto; margin: 0 0 1.25rem; }
+  table {
+    border-collapse: collapse; width: 100%; font-size: 0.885rem;
+    font-variant-numeric: tabular-nums;
+  }
+  caption {
+    text-align: left; font-family: var(--mono); font-size: 0.7rem;
+    letter-spacing: 0.11em; text-transform: uppercase; color: var(--faint);
+    padding-bottom: 0.55rem;
+  }
+  th, td { padding: 0.52rem 0.9rem 0.52rem 0; text-align: left; white-space: nowrap; }
+  th {
+    font-family: var(--mono); font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--rule-firm);
+  }
+  td { border-bottom: 1px solid var(--rule); }
+  tbody tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-family: var(--mono); }
+  .big { font-weight: 700; font-size: 0.95rem; }
+  .up   { color: var(--gain); font-weight: 700; }
+  .down { color: var(--loss); font-weight: 700; }
+  .note { color: var(--faint); font-size: 0.85rem; white-space: normal; }
+  tr.total td { border-top: 2px solid var(--rule-firm); border-bottom: none; }
+
+  /* ── callout ──────────────────────────────────────────── */
+  .warn {
+    background: var(--gold-sf); border-left: 3px solid var(--gold);
+    padding: 0.9rem 1.1rem; margin: 0 0 1.25rem; font-size: 0.92rem;
+  }
+  .warn p:last-child { margin-bottom: 0; }
+  .warn .lbl {
+    font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold);
+    display: block; margin-bottom: 0.3rem;
+  }
+
+  /* ── pending list ─────────────────────────────────────── */
+  .todo { list-style: none; padding: 0; margin: 0; display: grid; gap: 1.15rem; }
+  .todo li {
+    display: grid; grid-template-columns: 2.2rem 1fr; gap: 0.9rem;
+    padding-bottom: 1.15rem; border-bottom: 1px solid var(--rule);
+  }
+  .todo li:last-child { border-bottom: none; padding-bottom: 0; }
+  .rank {
+    font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
+    color: var(--accent); padding-top: 0.15rem;
+  }
+  .todo h4 { margin: 0 0 0.25rem; font-size: 0.99rem; font-weight: 700; }
+  .todo p { margin: 0; font-size: 0.91rem; color: var(--muted); }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.4rem; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 0.76rem; color: var(--faint);
+  }
+  @media (max-width: 34rem) {
+    body { padding: 0 0.9rem 4rem; }
+    .filename { font-size: 1.15rem; }
+  }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="kicker">Kaggle · Featured Simulation · Kaggriculture</div>
+  <h1>Status, runbook &amp; submission</h1>
+  <p class="standfirst">An agent that prices every possible action in dollars, then sends each farm hand to whichever job pays best for the steps it takes to get there.</p>
+  <div class="meta">
+    <span>branch KA-agent</span>
+    <span>commit 0a5f716</span>
+    <span>30-day season · 720 turns</span>
+  </div>
+</header>
+
+<section>
+  <div class="eyebrow">What to upload</div>
+  <h2>One file. Not a zip.</h2>
+  <div class="prose">
+    <p>Kaggle offers a zip/gz/7z option for agents split across several files. This agent isn’t one — it imports only <code>math</code> and <code>os</code>, so there is nothing to bundle.</p>
+  </div>
+
+  <div class="submit">
+    <div class="submit-head">
+      <span class="filename">main.py</span>
+      <span class="verdict v-ship">upload this</span>
+    </div>
+    <p class="submit-sub">Submit to Competition → File Upload → Browse Files</p>
+<pre><code>kaggle competitions submit -c kaggriculture -f main.py \
+  -m "porter runs; ~78k vs pass"</code></pre>
+    <ul class="checks">
+      <li><span class="tick">✓</span> <span>Kaggle runs <code>[v for v in env.values() if callable(v)][-1]</code> — the <strong>last callable defined in the file</strong>, whatever its name. Confirmed that’s <code>agent</code>.</span></li>
+      <li><span class="tick">✓</span> <span>Loaded as a file path rather than an imported module it scores <strong>$77,114</strong> over 8 games, matching the module numbers.</span></li>
+      <li><span class="tick">✓</span> <span>Single file, standard library only — nothing to bundle.</span></li>
+    </ul>
+  </div>
+
+  <div class="warn" style="margin-top:1.25rem">
+    <span class="lbl">Do not break this</span>
+    <p>Kaggle <code>exec</code>s the file just to grab <code>agent</code>, so <strong>never define a function or class below <code>agent</code></strong> in <code>main.py</code> — it would silently become the submitted agent. A bare <code>if __name__ == "__main__":</code> block is safe (and dead on Kaggle); a <code>def main():</code> under it is not.</p>
+  </div>
+
+  <p class="prose"><strong>Nothing else gets uploaded.</strong> <code>bench.py</code>, <code>tune.py</code>, <code>trace.py</code>, <code>actions.py</code>, <code>baselines/</code> and the docs are local tooling.</p>
+</section>
+
+<section>
+  <div class="eyebrow">Where it stands</div>
+  <h2>Measured, not estimated</h2>
+  <p class="prose">Every figure comes from <code>bench.py</code> over fixed seeds. The old v12 agent scored <strong>$4,464</strong> vs <code>random</code> — this is roughly <strong>18×</strong> that.</p>
+
+  <div class="scroll">
+    <table>
+      <caption>Current performance</caption>
+      <thead>
+        <tr>
+          <th>Matchup</th><th class="num">Games</th><th class="num">Mean</th>
+          <th class="num">Median</th><th class="num">Min</th><th class="num">Winrate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>vs <code>random</code></td><td class="num">16</td><td class="num big">$81,166</td><td class="num">$80,938</td><td class="num">$72,201</td><td class="num">16/16</td></tr>
+        <tr><td>vs <code>pass</code> <span class="note">(deterministic — tune against this)</span></td><td class="num">48</td><td class="num big">$78,475</td><td class="num">$79,689</td><td class="num">$48,171</td><td class="num">48/48</td></tr>
+        <tr><td>vs <strong>v12</strong>, both seats</td><td class="num">20</td><td class="num big">$74,635</td><td class="num">$73,885</td><td class="num">$55,793</td><td class="num">20/20</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose note" style="white-space:normal">Runtime is 4.6 ms/turn against a 1000 ms <code>actTimeout</code> — there is a great deal of compute headroom left.</p>
+</section>
+
+<section>
+  <div class="eyebrow">This session</div>
+  <h2>Two decisions, both measured</h2>
+
+  <h3>Mid-day porter runs <span class="verdict v-ship">shipped · +$2,202</span></h3>
+  <div class="prose">
+    <p>Units now walk produce to the shed <strong>mid-day</strong> once the day’s haul is outgrowing it, not only on day 29. Goods reach the shed only at end of day, and anything past the 100-item cap is <strong>discarded silently</strong> — so ferrying early, where the SELL orders can drain it, recovers output that was being thrown away.</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>Paired over 48 seeds vs pass</caption>
+      <thead><tr><th></th><th class="num">Mean</th><th class="num">Median</th><th class="num">Min</th></tr></thead>
+      <tbody>
+        <tr><td>Porter <strong>on</strong></td><td class="num">$78,475</td><td class="num">$79,689</td><td class="num">$48,171</td></tr>
+        <tr><td>Porter <strong>off</strong></td><td class="num">$76,273</td><td class="num">$76,503</td><td class="num">$43,547</td></tr>
+        <tr class="total"><td><strong>Delta</strong></td><td class="num up">+$2,202</td><td class="num up">+$3,186</td><td class="num up">+$4,624</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose">It lifts the <em>floor</em> harder than the mean — the expected signature, since it pays in exactly those games where production overran the shed.</p>
+  <div class="warn">
+    <span class="lbl">Measurement trap</span>
+    <p>Measure this one at <strong>n ≥ 48</strong>. At n=16 the effect flipped sign between seed windows and briefly looked negative.</p>
+  </div>
+
+  <h3>Goose / egg engine <span class="verdict v-cut">built · switched off</span></h3>
+  <div class="prose">
+    <p>Fully implemented — <code>BUILD_COOP</code>, <code>BUY_ANIMAL</code>, <code>PICKUP</code> at the shed, <code>PLACE</code>, then daily <code>FEED</code>/<code>CARE</code>/<code>HARVEST</code>/<code>COLLECT_FERTILIZER</code>, plus a wheat feed reserve and <code>BUY_PRODUCT</code> top-ups. It sits behind <code>MAX_GEESE</code>, which now defaults to <strong>0</strong>, because it loses money at every size measured.</p>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <caption>Mean vs pass, 16 seeds</caption>
+      <thead><tr><th>MAX_GEESE</th><th class="num">0</th><th class="num">4</th><th class="num">8</th><th class="num">16</th></tr></thead>
+      <tbody>
+        <tr><td>mean</td><td class="num big">$79,472</td><td class="num down">$69,309</td><td class="num down">$62,858</td><td class="num down">$54,027</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose">
+    <p>The previous handoff called this “the largest single remaining lever” and costed it per <em>tile</em>. But tiles are not the binding constraint — <strong>unit-actions are</strong>. A bird grosses ~$150/day (2 eggs at ~$42, 1 fertilizer at ~$70, less a $35 wheat) yet needs ~7 actions/day to collect it, and <code>actions.py</code> shows <strong>51.7% of every unit-action is already just walking</strong>. Traces showed it managing to feed only 7–11 of 16 birds on a given day.</p>
+    <p><code>GOOSE_UPKEEP</code> double-charging crew capacity was tested as the alternative explanation and ruled out (−112, noise).</p>
+  </div>
+
+  <h3>Engine facts established</h3>
+  <div class="prose">
+    <p>All verified against <code>kaggriculture.py</code> rather than inferred from games — worth keeping whatever happens to the flock.</p>
+    <ul>
+      <li><code>BUILD_COOP</code> is <strong>free</strong>; the $300 is the bird. Requires a <code>None</code> tile.</li>
+      <li>Animals produce <strong>whether or not they are fed</strong>. Feeding governs survival — two consecutive dry nights and the bird escapes, structure intact — and lets a fed night spend the <code>CARE</code> bonus.</li>
+      <li><code>FEED</code> draws wheat from the <strong>unit’s own inventory</strong>, not the shed, so every feed cycle needs a <code>PICKUP</code> run first. This is what makes it so action-hungry.</li>
+      <li><code>max_held</code> caps only <em>uncollected</em> product, so lifetime output is unbounded.</li>
+      <li><strong>FERTILIZER is in no shop’s list and is excluded from <code>TOWN_CENTER_PRODUCTS</code></strong> — its inventory only moves when we sell, making it a one-shot ~$25k prize that floors after ~495 units, exactly like melon.</li>
+      <li><code>BUY_ANIMAL</code> lands the bird in the <strong>shed</strong>, against the 100-item cap.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Runbook</div>
+  <h2>How to run it</h2>
+  <p class="prose">All from the repo root. Timings on a 16-core machine — a single game costs ~4.6 s of CPU, so everything here finishes in under a minute. Run them interactively; don’t bother backgrounding them.</p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th><th class="num">Time</th></tr></thead>
+      <tbody>
+        <tr><td><code>uv run bench.py --opp pass -n 16 --workers 16</code></td><td class="note">Score over 16 games</td><td class="num">9 s</td></tr>
+        <tr><td><code>uv run bench.py --opp pass -n 48 --workers 16</code></td><td class="note">Score over 48 games</td><td class="num">29 s</td></tr>
+        <tr><td><code>uv run bench.py --opp random -n 16</code></td><td class="note">vs the built-in random agent</td><td class="num">9 s</td></tr>
+        <tr><td><code>uv run bench.py --opp baselines/v12.py -n 10 --swap</code></td><td class="note">Regression vs old agent, both seats</td><td class="num">12 s</td></tr>
+        <tr><td><code>uv run trace.py --seed 2003 --opp pass</code></td><td class="note">One game, day by day</td><td class="num">5 s</td></tr>
+        <tr><td><code>uv run actions.py --seed 2003 --opp pass</code></td><td class="note">Where the crew’s day goes, by op</td><td class="num">5 s</td></tr>
+        <tr><td><code>uv run tune.py MAX_UNITS 10 12 14</code></td><td class="note">Sweep one parameter, paired</td><td class="num">40 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3><code>uv run python main.py</code> prints nothing — that is correct</h3>
+  <div class="prose">
+    <p><code>main.py</code> is the agent <em>module</em>, not a program. It defines constants and functions and exits; nothing calls <code>agent()</code> unless a harness does. Silence and exit code 0 mean the file is healthy. Use <code>trace.py</code> to actually watch it farm.</p>
+  </div>
+
+  <h3>Two things that save hours</h3>
+  <div class="prose">
+    <p><strong><code>KAG_DEBUG=1</code> disables the <code>try/except</code> in <code>agent</code></strong>, so exceptions surface instead of silently degrading to <code>PASS</code>. Always develop with it — without it, a crashing agent just looks like a bad score.</p>
+  </div>
+<pre><code>KAG_DEBUG=1 uv run bench.py --opp pass -n 4 --workers 4</code></pre>
+  <div class="prose">
+    <p><strong>Tune against <code>pass</code>, never <code>random</code>.</strong> The built-in <code>random_agent</code> calls <code>random.Random()</code> with no seed, adding ~3.5% run-to-run noise that drowns real effects.</p>
+  </div>
+
+  <h3>Every tunable is an environment variable</h3>
+<pre><code>KAG_MAX_GEESE=8    uv run bench.py --opp pass -n 16   <span class="cmt"># ~$63k, i.e. worse</span>
+KAG_PORTER_FILL=10 uv run bench.py --opp pass -n 48   <span class="cmt"># porter runs off</span></code></pre>
+
+  <div class="scroll">
+    <table>
+      <caption>Tuned parameters</caption>
+      <thead><tr><th>Param</th><th class="num">Value</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td><code>MAX_UNITS</code></td><td class="num">12</td><td class="note">8→$66k, 10→$69k, <strong>12→$69k</strong>, 14→$63k</td></tr>
+        <tr><td><code>TILES_PER_UNIT</code></td><td class="num">6.0</td><td class="note">5→$48k (over-hires), 6→$71k, 8→$66k</td></tr>
+        <tr><td><code>MOVE_COST</code></td><td class="num">7.0</td><td class="note">flat 3–7; 10→$48k, 15→$46k</td></tr>
+        <tr><td><code>SEED_RATION</code></td><td class="num">6</td><td class="note">4→$62k, <strong>6→$77k</strong>, 10→$74k, 20→$68k</td></tr>
+        <tr><td><code>LAND_BUFFER</code></td><td class="num">800</td><td class="note">200→$50k (starves seeds); ≥400 all equal</td></tr>
+        <tr><td><code>PORTER_FILL</code></td><td class="num">0.6</td><td class="note">shed fill that starts mid-day drops; +$2,202 vs off</td></tr>
+        <tr><td><code>MAX_GEESE</code></td><td class="num">0</td><td class="note">flock off; 4→−$10k, 8→−$17k, 16→−$25k</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Still open</div>
+  <h2>What’s pending</h2>
+  <ol class="todo">
+    <li>
+      <span class="rank">01</span>
+      <div>
+        <h4>Cut the walking</h4>
+        <p>51.7% of unit-actions are moves; another 11.5% are <code>PASS</code>. Assignment is greedy per-turn with no notion of a route, so units criss-cross the farm. Biggest remaining lever on the crop engine — and the precondition for the flock ever paying.</p>
+      </div>
+    </li>
+    <li>
+      <span class="rank">02</span>
+      <div>
+        <h4>The panic-dump rule is mispriced <span class="verdict v-bug">defect</span></h4>
+        <p>When <code>shed_fill + incoming &gt; SHED_CAP − 10</code>, <code>reserve_frac</code> drops to 0.05 and the agent sells anything at almost any price. Flock traces showed it dumping melon at <strong>$4</strong> against a $250 base. Overflow really is discarded so the rule is right in principle, but it should dump the <em>cheapest</em> items, not everything. Fires without geese too, whenever crop throughput is high.</p>
+      </div>
+    </li>
+    <li>
+      <span class="rank">03</span>
+      <div>
+        <h4>Land timing</h4>
+        <p>Quadrants 3 and 4 still land around day 11 because cash is tied up in melon seeds until the day-10 harvest. Reserving toward the next land price is probably worth several thousand.</p>
+      </div>
+    </li>
+    <li>
+      <span class="rank">04</span>
+      <div>
+        <h4>Self-play validation</h4>
+        <p>Everything is measured against <code>random</code>, <code>pass</code> and v12, none of which really compete for the shared market. A real opponent chasing the same scarcity premiums would change crop valuations. Run <code>bench.py --agent main:agent --opp main.py --swap</code>.</p>
+      </div>
+    </li>
+    <li>
+      <span class="rank">05</span>
+      <div>
+        <h4>Housekeeping</h4>
+        <p>The commits are <strong>unpushed</strong> — <code>KA-agent</code> is 3 ahead of <code>origin</code>. <code>debug_wrapper.py</code> is redundant with <code>actions.py</code> and can be dropped whenever.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<footer>
+  Kaggriculture · branch KA-agent · commit 0a5f716 · all figures from bench.py over fixed seeds
+</footer>
+
+</div>

@@ -1,7 +1,15 @@
 # Kaggriculture — Status, Runbook, and Submission
 
-Branch `KA-agent`, commit `aa7a859`. Every number here was measured with
-`bench.py` over fixed seeds, not estimated.
+Branch `KA-agent`. Every number here was measured with `bench.py` over fixed
+seeds, not estimated.
+
+> 📄 **A formatted version of this document is `PROJECT_STATUS.html`** — open it
+> with `xdg-open PROJECT_STATUS.html`, or double-click it. Self-contained (all
+> CSS inline, no external fonts or scripts), works offline, follows your system
+> light/dark theme.
+>
+> **This `.md` is the source of truth.** If you change something here,
+> regenerate the HTML rather than hand-editing it, or the two will drift.
 
 ---
 
@@ -231,5 +239,6 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 | `actions.py` | Action-budget profiler | — |
 | `baselines/v12.py` | Frozen old agent, for regression checks | — |
 | `kaggriculture_handoff.md` | Deep technical handoff (engine facts, design) | — |
-| `PROJECT_STATUS.md` | This document | — |
+| `PROJECT_STATUS.md` | This document — **source of truth** | — |
+| `PROJECT_STATUS.html` | Formatted, self-contained rendering of this document | — |
 | `debug_wrapper.py` | Old ad-hoc debug script, redundant | — |
