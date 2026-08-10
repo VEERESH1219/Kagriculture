@@ -1,107 +1,66 @@
 # Kaggriculture Agent - Current Status(team)
 
 ## Overview
-This document tracks the current features and planned improvements for the Kaggriculture agent.
+This document tracks the current features and recent improvements for the Kaggriculture agent.
 
-**Base Version Score:** ~8,000 – 12,000 (best observed: ~11,987)
+**v10 Version Score:** ~9,700 – 15,300 (Average: ~$9,761, Median: ~$10,521)
+*Significant improvement from the previous baseline of ~$8,238.*
 
 ---
 
-## Current Implemented Features
+## Current Implemented Features (v10)
 
 ### 1. Core Farming Loop
-- [x] Buy Wheat seeds
-- [x] Buy Melon seeds (preferred when money ≥ 80)
-- [x] Plant Melon (priority) and Wheat (fallback)
-- [x] Water plants daily
-- [x] Harvest mature crops
-  - Wheat: age ≥ 2
-  - Melon: age ≥ 10
-- [x] Sell harvested produce from the shed
+- [x] Multi-crop strategy: Heavily Melon-focused with Wheat and Carrot as fast cash fillers.
+- [x] Strict plant capacity management (max 8 plants per worker) to prevent unwatered plants from dying and turning into weeds.
+- [x] Water plants daily (critical fix: plants get `consecutive_unwatered=1` on the day they are planted).
+- [x] Early Harvest optimization: Wheat and Carrot can be harvested before max yield to quickly replant and generate cash flow, while Melon waits for max yield.
 
 ### 2. Weed Management
-- [x] Detect weeds
-- [x] Dig weeds when standing on them
-- [x] Prefer moving toward weeds
+- [x] Massive weed reduction due to strict watering capacity limits.
+- [x] Dig weeds when encountered.
 
 ### 3. Labor
-- [x] Hire 1 farm hand (when money ≥ 30 and step > 10)
-- [x] Farm hand can plant, water, harvest, and dig weeds
-- [ ] Farm hand still uses simple (non-smart) movement
+- [x] Hire up to 3 farm hands (1 farmer + 3 hands = 4 workers total).
+- [x] Hands reset daily, so the agent hires 3 hands at hour 0 of every day (costing $4/day).
+- [x] Farm hands utilize the same smart BFS movement logic as the farmer.
 
 ### 4. Movement
-- [x] Farmer uses smart local movement
-  - Prioritizes: Weed → Harvest → Water → Plant
-- [x] Basic direction fallback (East → South → West → North)
-- [ ] No real pathfinding (A* was tried but made the agent unstable)
-- [ ] Farm hand movement is still basic
+- [x] All units use smart BFS movement.
+- [x] Distance penalty tweaked (reduced to `dist * 3`) to allow workers to spread out and plant across the entire grid without getting stuck in the corner.
+- [x] Workers avoid moving to tiles that are already targeted by other workers (using an `occupied_set`).
 
-### 5. Market
-- [x] Buy seeds when needed
-- [x] Sell all Melon and Wheat from shed every turn
-- [x] Hire hand via market order
-- [ ] No fertilizer buying/usage
-- [ ] No animal buying
-- [ ] No land expansion (`BUY_LAND`)
-- [ ] No advanced sell timing / price impact ranking
+### 5. Market & Economy
+- [x] Batch selling: Sales are capped per turn (e.g., max 4 Melons, 15 Wheat) to prevent crashing the market prices via the `sq` price curve.
+- [x] Aggressive day 0 seed buying (Melon, Carrot, Wheat) to maximize early game production.
+- [x] Land expansion: Automatically buys land when economy is strong (money ≥ $3000 and day ≥ 10).
+- [x] End-of-season dump: Sells entire shed inventory on the last 2 days.
 
 ---
 
-## Features Tried but Removed (Unstable)
+## Features Tried but Removed or Deferred
 
 | Feature              | Reason for Removal                     |
 |----------------------|----------------------------------------|
 | A* Pathfinding       | Caused performance instability         |
-| Fertilizer system    | Economy collapsed when added too early |
+| Fertilizer system    | Requires further testing to prevent economy collapse |
 | Goose / Eggs         | Too expensive + feeding issues         |
-| Multi-hand hiring    | Caused money problems                  |
-| Complex inventory logic | Introduced bugs                     |
+| 100% Melon           | Takes too long to yield, need fast cash crops (Wheat) early |
 
 ---
 
-## Recommended Improvement Roadmap
+## Next Recommended Steps
 
-### Phase 1 – Stability & Efficiency (Next)
-1. **Smart movement for the farm hand** (same logic as farmer)
-2. Buy multiple seeds at once (instead of 1)
-3. Better threshold for hiring the hand
+### Phase 1 – Market Fine-Tuning
+- Dynamically adjust batch selling limits based on actual observed market prices rather than static limits.
+- Optimize the seed buying logic when expanding land to rapidly fill the newly acquired 25 tiles.
 
-### Phase 2 – Economy Boost
-4. Simple Fertilizer usage (only on Melon, only when money is safe)
-5. Stop selling everything every turn (basic price awareness)
-
-### Phase 3 – Scaling
-6. Land expansion (`BUY_LAND`)
-7. Second farm hand
-8. Basic animal (Goose) with very strict conditions
-
-### Phase 4 – Advanced
-9. Price-impact sell ranking
-10. Terminal dump (force sell near day 30)
-11. Opponent awareness
-
----
-
-## Current Agent Architecture
-
-```
-Observation
-    ↓
-Market Decisions (Buy seeds / Sell / Hire)
-    ↓
-Decide action on current tile (Farmer + Hand)
-    ↓
-If idle → Smart Movement (Farmer only)
-    ↓
-Return action dict
-```
+### Phase 2 – Advanced Items
+- Reintroduce Fertilizer, but strictly limit its use to Melon crops on days 12-25 when money is abundant.
+- Add logic to monitor the opponent's shed/market activity and undercut their sales.
 
 ---
 
 ## Notes
-- The agent is currently **deterministic** and rule-based.
-- No machine learning / reinforcement learning is used yet.
-- Focus remains on building a strong, stable scripted agent first.
-
----
-
+- The agent is heavily optimized around the environment's specific mechanics (e.g., plants needing water on the exact day they are planted, price curves).
+- Performance is consistently beating the 'random' baseline by a massive margin.
