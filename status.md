@@ -1,4 +1,4 @@
-# Kaggriculture Agent - Current Status
+# Kaggriculture Agent - Current Status(team)
 
 ## Overview
 This document tracks the current features and planned improvements for the Kaggriculture agent.
