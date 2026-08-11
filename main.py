@@ -133,6 +133,39 @@ CASH_FLOOR = _tune("CASH_FLOOR", 150)
 MAX_GEESE = _tune("MAX_GEESE", 0)            # hard ceiling on the flock
 GEESE_PER_UNIT = _tune("GEESE_PER_UNIT", 2.0)   # a goose costs ~3.5 actions/day
 GOOSE_UPKEEP = _tune("GOOSE_UPKEEP", 3.0)    # tile-equivalents of crew time per goose
+
+# Fertilizer OFF by default -- built, measured, and it does not pay. FERTILIZE
+# doubles what a watering adds, for `day`..`day+2`, and draws one FERTILIZER
+# from the acting unit's OWN inventory -- not the shed -- so every application
+# draws one FERTILIZER from the acting unit's OWN inventory -- not the shed --
+# needs a PICKUP trip first.
+#
+# On paper only the ongoing crops are worth it: their scheduled productions go
+# from 1 unit to 2, and one 3-day cover catches several --
+#   STRAWBERRY  fires at ages 10,12,14,16; a cover catches two, so two
+#               applications double all four:  +4 x $120 base
+#   TOMATO      fires at ages 8,9,10,11; one cover catches three: +4 x $60
+# The one-time crops never are: wheat gains +2 x $25 and carrot +1 x $35, both
+# under the ~$100 a sack costs, and melon only reaches its cap two days sooner.
+# So only TOMATO and STRAWBERRY are ever considered.
+#
+# It still loses, and the reason is that the paper numbers are quoted at base.
+# We already flood tomato and strawberry -- they are the crops the engine likes
+# -- so the marginal unit clears far below base while the sack costs $100 and
+# rises as we buy. Measured over 16 seeds vs pass, against a $77,495 baseline:
+#
+#   naive (value units at sticker)      $55,381   -$22.1k
+#   + price through batch_revenue       $68,956    -$8.5k
+#   + buy per free hand, not per tile   $71,548    -$5.9k
+#   + FERT_MARGIN 2.0 / 3.0      $75,078 / $76,350
+#   + FERT_MARGIN 5.0                   $77,495       $0   (never fires)
+#
+# Monotonic to baseline: the best available outcome is to not do it. Revisit
+# only if the agent stops saturating those two markets, or if animals ever come
+# back -- they make fertilizer free, which removes the whole cost side.
+FERT_ON = _tune("FERT_ON", 0)                # 1 enables the fertilizer engine
+FERT_BATCH = _tune("FERT_BATCH", 4)          # fertilizer carried per shed trip
+FERT_MARGIN = _tune("FERT_MARGIN", 1.0)      # revenue must beat this x sack price
 FEED_DAYS = _tune("FEED_DAYS", 3)            # days of wheat feed to hold back from sales
 PICKUP_BATCH = _tune("PICKUP_BATCH", 6)      # wheat carried per shed trip
 PORTER_FILL = _tune("PORTER_FILL", 0.6)      # shed fill fraction that starts porter runs
@@ -537,6 +570,51 @@ def _decide(obs):
         if gain > 0:
             add(gain, x, y, ["WATER"])
 
+    # Fertilizer jobs. `fertilized_until_day` already covers a span, so an
+    # application only earns the productions it newly reaches -- re-fertilizing
+    # inside an active cover is pure waste.
+    def fert_units(crop, t, age):
+        """Extra units one FERTILIZE now would add, over just watering."""
+        cd = CROPS[crop]
+        if not cd["ongoing"]:
+            return 0
+        room = cd["max_yield"] - t.get("yield_units", 0)
+        if room <= 0:
+            return 0
+        first, iv = cd["first_yield_day"], cd["interval"]
+        covered = t.get("fertilized_until_day", -1)
+        hits = 0
+        for k in (0, 1, 2):
+            a = age + k
+            if day + k <= covered or a - age > days_left:
+                continue
+            if a < first or (a - first) % iv or (a - first) // iv >= cd["max_yield"]:
+                continue
+            hits += 1
+        return min(room, hits)
+
+    # The extra units are marginal on top of everything already coming, so they
+    # must be priced against the inventory they will actually meet. Valuing them
+    # at today's sticker is what made the first cut of this lose $22k a game: it
+    # bought ~115 sacks a season for units that cleared at a fraction of quote.
+    # Cost is quoted post-buy, like the wheat feed, since each sack we take out
+    # lifts the next one's price.
+    fert_p_now = market_price("FERTILIZER", minv.get("FERTILIZER", MARKET_I0) - 1)
+    want_fert = 0
+    if FERT_ON and not last_day:
+        for (x, y, t, crop, age) in plants:
+            n = fert_units(crop, t, age)
+            if n <= 0:
+                continue
+            rev = batch_revenue(crop, start_inventory(crop, 3), n)
+            gain = rev - fert_p_now
+            # The sack's price is not the whole cost: applying it burns a unit
+            # action plus a share of a PICKUP trip, and the cash competes with
+            # seed and land. FERT_MARGIN is the headroom that stands in for both.
+            if rev > FERT_MARGIN * fert_p_now:
+                want_fert += 1
+                add(gain, x, y, ["FERTILIZE"], need=("FERTILIZER", 1))
+
     for (x, y) in weeds:
         if not last_day:
             add(tile_unlock_value * 0.8, x, y, ["DIG"])
@@ -635,6 +713,18 @@ def _decide(obs):
                 break
             add(n * (EGGS_PER_YIELD * egg_p + fert_p) * 0.5, tx, ty,
                 ["PICKUP", "WHEAT", n])
+
+    # Fetch fertilizer. Like FEED, FERTILIZE draws from the unit's own hands, so
+    # the sacks have to be walked out before any of the jobs above can fire.
+    carried_fert = sum(i.get("FERTILIZER", 0) for i in inventories)
+    shed_fert = shed.get("FERTILIZER", 0)
+    if FERT_ON and not last_day and shed_fert > 0 and want_fert > carried_fert:
+        short = want_fert - carried_fert
+        for i, (tx, ty) in enumerate(SHED_TILES):
+            n = min(FERT_BATCH, shed_fert - i * FERT_BATCH, short - i * FERT_BATCH)
+            if n <= 0:
+                break
+            add(n * fert_p_now * 0.5, tx, ty, ["PICKUP", "FERTILIZER", n])
 
     # Fetch birds bought this season but still sitting in the shed.
     placeable = min(shed_geese, len(free_coops))
@@ -838,6 +928,23 @@ def _decide(obs):
                 feed_orders.append(["BUY_PRODUCT", "WHEAT", n])
                 cash -= n * unit_cost
 
+    # Fertilizer. Only bought against jobs that already price out as profitable,
+    # and never more than one cover's worth ahead -- a sack in the shed is a
+    # shed slot not holding produce.
+    fert_orders = []
+    if FERT_ON and not last_day and want_fert > shed_fert + carried_fert:
+        unit_cost = market_price("FERTILIZER", minv.get("FERTILIZER", MARKET_I0) - 1)
+        # A sack is only worth buying if somebody can carry it out and use it.
+        # Sizing the order by profitable *tiles* rather than by crew buys a
+        # season of stock on day one and starves the land programme of cash.
+        want_fert = min(want_fert, 1 + len(hands))
+        n = min(want_fert - shed_fert - carried_fert,
+                max(0, SHED_CAP - shed_fill - 5),
+                int(max(0, cash - CASH_FLOOR - land_reserve) // max(1, unit_cost)))
+        if n > 0:
+            fert_orders.append(["BUY_PRODUCT", "FERTILIZER", n])
+            cash -= n * unit_cost
+
     seed_orders = []
     if not last_day:
         held = sum(seeds.values())
@@ -867,7 +974,8 @@ def _decide(obs):
 
     # Fit into the per-turn order cap, trimming sells first: they are the most
     # divisible and the cheapest to defer by one turn.
-    fixed = land_orders + hire_orders + animal_orders + feed_orders + seed_orders
+    fixed = (land_orders + hire_orders + animal_orders + feed_orders
+             + fert_orders + seed_orders)
     room = max(0, MAX_MARKET_ORDERS - len(fixed))
     orders = sell_orders[:room] + fixed
     if len(orders) > MAX_MARKET_ORDERS:
