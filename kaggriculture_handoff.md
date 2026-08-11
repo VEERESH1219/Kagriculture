@@ -165,29 +165,55 @@ Swept one at a time vs `pass`, 16 seeds. Current values in `main.py`:
 
 ## Next steps, highest expected value first
 
-1. **Price the opponent's supply.** Self-play has now been run, and it costs
-   **44% of the score** ($43,841 vs $78,475). `crop_profit` is the prime
-   suspect: it starts from `minv − town_drawdown + our_pipeline` and has **no
-   term for what the opponent will sell into the same inventory**. Every crop is
-   overvalued in a contested game, and the bias is worst precisely on the crops
-   we favour most — the fat scarcity premiums are fat because *nobody* is
-   selling, an assumption a real rival breaks. Cheapest first cut: assume a
-   symmetric opponent and double the `pipeline` term in `crop_profit`, then
-   measure with `--opp main.py --swap`. Worth ~$35k/game, and it is the only
-   item on this list measured against a real opponent.
-2. **Land timing.** Quadrants 3 and 4 are still bought around day 11 because
+1. **Land timing.** Quadrants 3 and 4 are still bought around day 11 because
    cash is tied up in melon seeds until the day-10 harvest. Reserving toward the
    next land price, or deferring melon, is probably worth several thousand.
-3. **Cut the walking.** `actions.py` says **51.7%** of all unit-actions are
+2. **Cut the walking.** `actions.py` says **51.7%** of all unit-actions are
    moves and another 11.5% are `PASS`. Assignment is greedy per turn and has no
    notion of a route, so units criss-cross the farm. Servicing tiles in a sweep,
    or biasing each unit toward a home region, is now the biggest lever on the
    crop engine itself — and it is the precondition for the flock ever paying.
-4. **The panic-dump rule may be mispriced.** When `shed_fill + incoming >
+3. **The panic-dump rule may be mispriced.** When `shed_fill + incoming >
    SHED_CAP - 10`, `reserve_frac` drops to 0.05 and the agent sells anything at
    almost any price. In flock traces this dumped melon at **$4** against a base
    of $250. Overflow really is discarded, so the rule is right in principle, but
    it should dump the *cheapest* items rather than everything.
+4. **Re-derive the animal question.** `ANIMALS` contains only `GOOSE` — there is
+   no cow or sheep path in the agent at all. The comment at `main.py:80` rules
+   them out because milk caps at ~$6k lifetime revenue and wool at ~$8k, but
+   that was computed **assuming the whole market is ours**. Live Kaggle replays
+   show opponents buying cows on day 1. A capped $6k that nobody contests can
+   beat an uncapped wheat plan that several agents are collapsing at once.
+
+## `OPP_SUPPLY`: pricing supply we cannot observe (2026-08-11)
+
+`crop_profit` and `start_inventory` price a harvest against
+`minv − town_drawdown + pipeline`, and `pipeline` holds **only our own** crop —
+the opponent's fields are not in the observation. Both sites now scale it by
+`1 + OPP_SUPPLY`. At `0.0` the agent is byte-identical in behaviour to the old
+one (verified to the dollar); the shipped default is **`1.0`**, i.e. assume a
+symmetric opponent.
+
+Swept 0 → 3 against a frozen copy of the `0.0` agent over **two independent
+64-game seed sets** (`--seed0 1000` and `5000`, `--swap` on both):
+
+| OPP_SUPPLY | run 1 | run 2 | combined WR |
+|---|---|---|---|
+| 0.0 (control) | $0 / 20% | $0 / 17% | 24/128 = 19% |
+| 0.25 | +$5,389 / 81% | −$439 / 56% | 88/128 = 69% |
+| 0.5 | −$1,801 / 39% | +$1,144 / 59% | 63/128 = 49% |
+| 0.75 | +$4,810 / 66% | +$7,085 / 75% | 90/128 = 70% |
+| **1.0** | **+$6,115 / 73%** | **+$8,912 / 81%** | **99/128 = 77%** |
+| 1.5 | +$4,318 / 77% | +$613 / 62% | 89/128 = 70% |
+| 2.0 | +$527 / 44% | +$158 / 48% | 59/128 = 46% |
+| 3.0 | −$21,044 / 0% | −$19,886 / 0% | 0/128 = 0% |
+
+Two things to carry forward. **Always replicate on fresh seeds** — `0.25` led
+run 1 at 81% and went negative on run 2; a single sweep would have shipped a
+no-op. And **`1.0` is a trade, not a free win**: it is flat vs `pass` (+$118)
+but costs **$4,761 against v12**, because assuming a symmetric opponent
+over-corrects against a weak supplier. It still wins 100% of v12 games, just by
+less. Right call against live agents, wrong call against a passive field.
 
 ## Phase 4 (goose / egg engine): built, measured, switched off
 

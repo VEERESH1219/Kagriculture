@@ -71,6 +71,24 @@ The v12 agent scored **$4,464** vs `random`. Current agent is ~18x that.
 Runtime is 4.6 ms/turn against a 1000 ms `actTimeout`, so there is a lot of
 compute headroom left.
 
+### `OPP_SUPPLY=1.0` — the contested-market fix (2026-08-11)
+
+Those rows are all measured with `OPP_SUPPLY=0`. Against a frozen copy of that
+agent, the shipped default of **1.0** now wins **99 of 128 games** with a mean
+margin of **+$7,514**:
+
+| Opponent | before | after | Δ |
+|---|---|---|---|
+| `pass` (n=32) | $77,248 | $77,366 | +$118 — flat |
+| `v12` (n=16 swap) | $75,192 | $70,431 | **−$4,761** |
+| the `0.0` agent (n=128) | tie | +$7,514 | **+$7,514** |
+
+**This is a trade, not a strict improvement.** `1.0` assumes the opponent
+supplies as much as we do; against a weak supplier like v12 that over-corrects
+and costs $4.8k. It still wins 100% of those games — it just wins by less. The
+trade is right on a leaderboard of live agents and would be wrong against a
+field of passive ones.
+
 ### ⚠️ The self-play number is the one to quote
 
 **$78,475 is a benchmark, not a forecast.** Against an opponent that genuinely
@@ -168,8 +186,55 @@ inventory, so prices fall twice as fast, the scarcity premiums that drove much
 of the strategy get competed away, and melon's one-shot ~$26k prize is split
 rather than taken whole.
 
-The immediate suspect is `crop_profit`, which has no term for opponent supply —
-see pending item #1.
+The immediate suspect was `crop_profit`, which had no term for opponent supply.
+That is now fixed — see below.
+
+### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
+
+`crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
+`pipeline` term holds **only our own** crop, because the opponent's fields are
+not in the observation. So every crop was overvalued in a contested game, worst
+on exactly the crops we rank highest — a symmetric opponent wants those for the
+same reasons we do.
+
+The fix scales the pipeline term by `1 + OPP_SUPPLY` at both valuation sites
+(`crop_profit`, `start_inventory`). `0.0` reproduces the old agent exactly —
+verified to the dollar on mean, median, min, max and stdev.
+
+Swept 0 → 3 against a frozen copy of the `0.0` agent, **two independent 64-game
+seed sets**, `--swap` on both:
+
+| OPP_SUPPLY | run 1 margin / WR | run 2 margin / WR | combined WR |
+|---|---|---|---|
+| 0.0 (control) | $0 / 20% | $0 / 17% | 24/128 = 19% |
+| 0.25 | +$5,389 / 81% | −$439 / 56% | 88/128 = 69% |
+| 0.5 | −$1,801 / 39% | +$1,144 / 59% | 63/128 = 49% |
+| 0.75 | +$4,810 / 66% | +$7,085 / 75% | 90/128 = 70% |
+| **1.0** | **+$6,115 / 73%** | **+$8,912 / 81%** | **99/128 = 77%** |
+| 1.5 | +$4,318 / 77% | +$613 / 62% | 89/128 = 70% |
+| 2.0 | +$527 / 44% | +$158 / 48% | 59/128 = 46% |
+| 3.0 | −$21,044 / 0% | −$19,886 / 0% | 0/128 = 0% |
+
+**Run the replication.** `0.25` led run 1 at 81% and went *negative* on fresh
+seeds. Reading the winner off a single sweep would have shipped a no-op. `1.0`
+is the only value that is best in both runs — and it is the a-priori correct
+answer against a mirror, which is a good sign it is mechanism and not curve fit.
+
+Past 2.0 it falls off a cliff: at `3.0` every crop prices as doomed, the agent
+stops planting, and it loses 0/128 — with the *lowest* stdev in the table,
+because it fails uniformly rather than wildly.
+
+The control is exact: `0.0` gave identical means for both seats in both runs
+($44,421/$44,421 and $46,165/$46,165), confirming no seat bias and no env-var
+leaking into the frozen opponent.
+
+Reproduce:
+```bash
+for X in 0.0 0.25 0.5 0.75 1.0 1.5 2.0 3.0; do
+  KAG_OPP_SUPPLY=$X uv run bench.py --agent main:agent \
+      --opp <frozen-copy-of-0.0-agent>.py --swap -n 32 --seed0 1000
+done
+```
 
 ### 🔎 Engine facts established (verified against the source)
 
@@ -249,40 +314,40 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 
 **Not started**
 
-1. **Price the opponent's supply.** Self-play costs us 44% of the score, and
-   `crop_profit` is the likely reason: it prices a planting at
-   `today − town_drawdown + our_pipeline`, with **no term for what the opponent
-   will sell into the same market**. Every crop is therefore systematically
-   overvalued in a contested game, and the crops we most favour — the ones with
-   the fattest scarcity premiums — are exactly the ones a rival is most likely
-   to be growing too. A first cut could assume a symmetric opponent and double
-   the pipeline term, then measure. This is now the top item: it is the only one
-   measured against a *real* opponent, and it is worth ~$35k/game.
-2. **Cut the walking.** 51.7% of unit-actions are moves, another 11.5% are
+1. **Cut the walking.** 51.7% of unit-actions are moves, another 11.5% are
    `PASS`. Assignment is greedy per-turn with no notion of a route, so units
    criss-cross the farm. Biggest remaining lever on the crop engine — and the
    precondition for the flock ever paying.
-3. **Land timing.** Quadrants 3 and 4 still land around day 11 because cash is
+2. **Land timing.** Quadrants 3 and 4 still land around day 11 because cash is
    tied up in melon seeds until the day-10 harvest. Reserving toward the next
    land price is probably worth several thousand.
-4. **The panic-dump rule is mispriced.** When
+3. **The panic-dump rule is mispriced.** When
    `shed_fill + incoming > SHED_CAP - 10`, `reserve_frac` drops to 0.05 and the
    agent sells anything at almost any price. Flock traces showed it dumping
    melon at **$4** against a $250 base. Overflow really is discarded so the rule
    is right in principle, but it should dump the *cheapest* items, not
    everything. This is a latent defect that can fire without geese whenever crop
-   throughput is high — smaller job than #1 and a real bug rather than an
-   enhancement.
+   throughput is high — a real bug rather than an enhancement.
 
 **Built but parked**
 
-5. **Goose engine** — complete behind `MAX_GEESE=0`. Only revisit after #1.
+4. **Goose engine** — complete behind `MAX_GEESE=0`.
+5. **Animals beyond the goose.** `ANIMALS` only knows `GOOSE`; there is no cow
+   or sheep path at all. The justification (`main.py:80` — milk caps at ~$6k
+   lifetime revenue, wool ~$8k) was derived **assuming we own the whole
+   market**. Live replays show opponents buying cows on day 1. In a contested
+   game a capped $6k nobody competes for may well beat an uncapped wheat plan
+   that three agents are collapsing at once. Worth re-deriving, not assuming.
 
 **Housekeeping**
 
 6. `debug_wrapper.py` is redundant with `actions.py`/`trace.py`; drop it whenever.
-7. **`main.py` has not been submitted to Kaggle yet.** The work is committed and
-   pushed; the submission is the outstanding step.
+7. **The submitted agent is the pre-`OPP_SUPPLY` build.** `main.py` was
+   submitted on 2026-08-11 and scored **636.2** (rank 2197); five hours later it
+   had drifted to **607.9** (rank 2340). The whole board fell over that window,
+   so this is not all us — and the rating band was 509–716, so the move is
+   inside the noise. But it is not a climb. The `OPP_SUPPLY=1.0` build has not
+   been submitted yet.
 
 ---
 

@@ -106,6 +106,22 @@ PLANTS_PER_UNIT = _tune("PLANTS_PER_UNIT", 11)  # tiles one unit can tend per da
 LAND_BUFFER = _tune("LAND_BUFFER", 800)      # stay this liquid after buying land
 RESERVE_FRAC = _tune("RESERVE_FRAC", 0.45)   # hold while price < this x base
 SEED_RATION = _tune("SEED_RATION", 6)        # per-turn cap on slow, pricey seeds
+# We can see our own unsold pipeline but not the opponent's. This scales ours to
+# stand in for theirs when pricing what a harvest will clear against: 0 prices a
+# solo market (the behaviour before 2026-08-11), 1 assumes a symmetric opponent
+# farming the same crops for the same reasons.
+#
+# Swept 0 -> 3 over two independent 64-game seed sets, played against a frozen
+# copy of the 0 agent. 1.0 is the best value in BOTH runs (+$6.1k / +$8.9k
+# margin, 99/128 games won) and it is also the a-priori right answer against a
+# mirror, which is why it beat the tuned-looking values. Do not read a winner
+# off one sweep: 0.25 led run 1 at 81% and went negative on fresh seeds.
+# Past 2.0 it falls off a cliff -- at 3.0 every crop prices as doomed, the agent
+# stops planting, and it loses 0/128.
+#
+# This is a trade, not a free win. Against a weak supplier the symmetric
+# assumption over-corrects: v12 costs $4.8k (still 100% winrate). Flat vs pass.
+OPP_SUPPLY = _tune("OPP_SUPPLY", 1.0)
 HIRE_FLOOR = _tune("HIRE_FLOOR", 20)         # hands drive everything: never skip
 CASH_FLOOR = _tune("CASH_FLOOR", 150)
 # Flock OFF by default. The husbandry below works -- birds get built, bought,
@@ -369,9 +385,16 @@ def _decide(obs):
     # ── Crop valuation ─────────────────────────────────────────────────────
     # Price a planting at the inventory we expect to face when it comes out of
     # the ground: today's inventory, minus everything the town will consume in
-    # the meantime, plus our own unsold pipeline. The town's drawdown is what
+    # the meantime, plus the unsold pipeline. The town's drawdown is what
     # creates the scarcity premiums (strawberry, tomato) worth chasing, and the
     # pipeline term is what stops us flooding any one market.
+    #
+    # `pipeline` holds only our own crop, because the opponent's fields are not
+    # in the observation. Scaling it by OPP_SUPPLY charges a planting for the
+    # supply we cannot see. The bias this corrects is worst on exactly the crops
+    # we rank highest -- a symmetric opponent wants them for the same reasons --
+    # so leaving it at 0 systematically overvalues our first choice.
+    supply_scale = 1.0 + OPP_SUPPLY
     profit_cache = {}
 
     def crop_profit(crop):
@@ -385,7 +408,7 @@ def _decide(obs):
             profit_cache[crop] = -1.0
             return -1.0
         drawdown = demand_over(cycle).get(crop, 1.0) * cycle
-        start = minv.get(crop, MARKET_I0) - drawdown + pipeline.get(crop, 0)
+        start = minv.get(crop, MARKET_I0) - drawdown + pipeline.get(crop, 0) * supply_scale
         profit = batch_revenue(crop, start, plan["units"]) - CROPS[crop]["seed"]
         profit_cache[crop] = profit
         return profit
@@ -421,7 +444,7 @@ def _decide(obs):
     def start_inventory(item, horizon):
         """Market inventory `item` will face once our share of it lands."""
         drawdown = demand_over(horizon).get(item, 0.0) * horizon
-        return minv.get(item, MARKET_I0) - drawdown + pipeline.get(item, 0)
+        return minv.get(item, MARKET_I0) - drawdown + pipeline.get(item, 0) * supply_scale
 
     # ── Flock valuation ────────────────────────────────────────────────────
     # A goose is priced exactly like a planting: the revenue its remaining
