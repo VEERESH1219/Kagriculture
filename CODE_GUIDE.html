@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kaggriculture — Code Guide</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 14mm 15mm; }
+
+  :root {
+    --ink:      #16211c;
+    --ink-soft: #4a5a52;
+    --ink-faint:#7b8a83;
+    --rule:     #d7ded9;
+    --rule-soft:#e8ede9;
+    --accent:   #2B6B4F;
+    --accent-bg:#eef4f0;
+    --code-bg:  #f4f6f4;
+    --warn-bg:  #fdf6e8;
+    --warn-ink: #7a5a12;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Source Sans 3", "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 10.2pt;
+    line-height: 1.5;
+    color: var(--ink);
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  code, pre, .mono { font-family: "DejaVu Sans Mono", "Consolas", monospace; }
+
+  /* ── Cover ─────────────────────────────────────────── */
+  .cover { page-break-after: always; padding-top: 38mm; }
+  .cover .eyebrow {
+    font-size: 8.5pt; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700; margin-bottom: 10px;
+  }
+  .cover h1 { font-size: 30pt; line-height: 1.1; margin: 0 0 6px; font-weight: 700; letter-spacing: -.01em; }
+  .cover .sub { font-size: 13pt; color: var(--ink-soft); margin: 0 0 26px; font-weight: 400; }
+  .cover .rule { height: 3px; background: var(--accent); width: 64px; margin-bottom: 26px; }
+  .cover .lede { font-size: 11pt; color: var(--ink-soft); max-width: 128mm; }
+  .cover .meta {
+    margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--rule);
+    font-size: 9pt; color: var(--ink-faint);
+  }
+  .cover .meta b { color: var(--ink); font-weight: 600; }
+
+  .scorecard {
+    margin-top: 26px; display: flex; gap: 0; border: 1px solid var(--rule);
+    border-radius: 4px; overflow: hidden;
+  }
+  .scorecard div {
+    flex: 1; padding: 12px 14px; border-right: 1px solid var(--rule-soft);
+    background: var(--accent-bg);
+  }
+  .scorecard div:last-child { border-right: 0; }
+  .scorecard .n {
+    font-size: 17pt; font-weight: 700; color: var(--accent);
+    font-variant-numeric: tabular-nums; line-height: 1.1;
+  }
+  .scorecard .l { font-size: 8pt; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .07em; margin-top: 3px; }
+
+  /* ── Headings ──────────────────────────────────────── */
+  h2 {
+    font-size: 15pt; margin: 0 0 12px; padding-bottom: 6px;
+    border-bottom: 2px solid var(--accent); font-weight: 700;
+    page-break-after: avoid; letter-spacing: -.005em;
+  }
+  h2 .num {
+    display: inline-block; min-width: 22px; color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  h3 {
+    font-size: 11.2pt; margin: 18px 0 6px; font-weight: 700;
+    page-break-after: avoid; color: var(--ink);
+  }
+  h3 .file { font-family: "DejaVu Sans Mono", monospace; font-size: 10.4pt; }
+  h4 { font-size: 10pt; margin: 13px 0 4px; font-weight: 700; color: var(--ink-soft); page-break-after: avoid; }
+
+  section { page-break-before: always; }
+  section:first-of-type { page-break-before: avoid; }
+
+  p { margin: 0 0 8px; }
+  ul, ol { margin: 0 0 8px; padding-left: 19px; }
+  li { margin-bottom: 3px; }
+  strong { font-weight: 700; }
+
+  /* ── Tables ────────────────────────────────────────── */
+  table {
+    width: 100%; border-collapse: collapse; margin: 8px 0 12px;
+    font-size: 9.2pt; page-break-inside: avoid;
+  }
+  th {
+    text-align: left; padding: 5px 8px; border-bottom: 1.5px solid var(--ink);
+    font-weight: 700; font-size: 8.4pt; text-transform: uppercase; letter-spacing: .05em;
+  }
+  td { padding: 4.5px 8px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
+  td code { font-size: 8.6pt; }
+
+  /* ── Code ──────────────────────────────────────────── */
+  pre {
+    background: var(--code-bg); border-left: 2.5px solid var(--accent);
+    padding: 8px 11px; margin: 8px 0 10px; font-size: 8.5pt; line-height: 1.45;
+    white-space: pre-wrap; page-break-inside: avoid; border-radius: 0 3px 3px 0;
+  }
+  code { background: var(--code-bg); padding: 0.5px 3px; border-radius: 2px; font-size: 9pt; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* ── Callouts ──────────────────────────────────────── */
+  .note, .warn {
+    padding: 8px 12px; margin: 10px 0; font-size: 9.4pt;
+    border-radius: 3px; page-break-inside: avoid;
+  }
+  .note { background: var(--accent-bg); border-left: 2.5px solid var(--accent); }
+  .warn { background: var(--warn-bg); border-left: 2.5px solid #d4a017; color: var(--warn-ink); }
+  .note p:last-child, .warn p:last-child { margin-bottom: 0; }
+
+  .lead { font-size: 10.6pt; color: var(--ink-soft); margin-bottom: 14px; }
+
+  /* ── Pipeline steps ────────────────────────────────── */
+  .steps { counter-reset: s; margin: 10px 0 12px; padding: 0; list-style: none; }
+  .steps > li {
+    counter-increment: s; position: relative; padding-left: 30px;
+    margin-bottom: 9px; page-break-inside: avoid;
+  }
+  .steps > li::before {
+    content: counter(s); position: absolute; left: 0; top: 1px;
+    width: 19px; height: 19px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 8.5pt; font-weight: 700; text-align: center; line-height: 19px;
+  }
+  .steps b { display: block; }
+
+  .tag {
+    display: inline-block; font-size: 7.5pt; font-weight: 700; padding: 1px 6px;
+    border-radius: 9px; text-transform: uppercase; letter-spacing: .05em;
+    vertical-align: 1.5px; margin-left: 5px;
+  }
+  .tag.ship { background: #dff0e6; color: #1d5c3c; }
+  .tag.off  { background: #f2e3e3; color: #8a3232; }
+  .tag.tool { background: #e6ecf5; color: #2f4d78; }
+
+  .flow {
+    font-family: "DejaVu Sans Mono", monospace; font-size: 8.4pt;
+    background: var(--code-bg); padding: 10px 12px; margin: 8px 0 12px;
+    line-height: 1.55; page-break-inside: avoid; border-radius: 3px;
+    color: var(--ink-soft);
+  }
+
+  .footer-note {
+    margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--rule);
+    font-size: 8.5pt; color: var(--ink-faint);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ COVER ══════════════════ -->
+<div class="cover">
+  <div class="eyebrow">Kaggle Simulation Competition</div>
+  <h1>Kaggriculture</h1>
+  <p class="sub">A code guide to every Python file in the project</p>
+  <div class="rule"></div>
+  <p class="lede">
+    This document explains what each <code>.py</code> file in the repository does,
+    how the agent decides what to do on every one of its 720 turns, and how the
+    supporting tools were used to measure each change. It is written to be read
+    on its own, without the code open beside it.
+  </p>
+
+  <div class="scorecard">
+    <div><div class="n">866</div><div class="l">lines in main.py</div></div>
+    <div><div class="n">$78,475</div><div class="l">mean score</div></div>
+    <div><div class="n">18&times;</div><div class="l">vs previous version</div></div>
+    <div><div class="n">100%</div><div class="l">winrate, 84 games</div></div>
+  </div>
+
+  <div class="meta">
+    Repository <b>Kagriculture</b> &nbsp;·&nbsp; branch <b>KA-agent</b> &nbsp;·&nbsp; August 2026<br>
+    Companion documents: <b>PROJECT_STATUS.md</b> (status &amp; runbook) &nbsp;·&nbsp;
+    <b>kaggriculture_handoff.md</b> (engine internals)
+  </div>
+</div>
+
+<!-- ══════════════════ 1 ══════════════════ -->
+<section>
+<h2><span class="num">1</span> The problem being solved</h2>
+
+<p class="lead">Before the code makes sense, the game does.</p>
+
+<p>
+Kaggriculture is a two-player economic simulation. Each player runs a
+<strong>10&times;10 farm</strong> for a <strong>30-day season</strong> of
+<strong>24 turns per day</strong> — <strong>720 decisions</strong> in total. Both
+players sell into <strong>one shared market</strong>. The score is simply the
+money you hold at the end.
+</p>
+
+<h3>The three resources</h3>
+
+<table>
+  <thead><tr><th>Resource</th><th>How it works</th><th>Why it matters</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Land</strong></td><td>Start with one 25-tile quadrant; three more cost $1,000 / $2,000 / $4,000</td><td>Tiles are where crops grow</td></tr>
+    <tr><td><strong>Labour</strong></td><td>Hire hands at a Fibonacci price that resets daily: 1, 1, 2, 3, 5, 8, 13&hellip;</td><td>Each unit takes <em>one</em> action per turn</td></tr>
+    <tr><td><strong>Cash</strong></td><td>Buys seeds, land, hands, animals</td><td>Scarce early, ample later</td></tr>
+  </tbody>
+</table>
+
+<h3>The market is the real opponent</h3>
+
+<p>
+Prices are not fixed. Every item has a price curve around a reference inventory
+of <code>I0 = 10000</code>:
+</p>
+
+<pre><code>price(inventory) = base ± amplitude × f(|inventory − 10000|)</code></pre>
+
+<p>
+Sell into a market and its inventory rises, so <strong>your own selling pushes
+the price down</strong>. Meanwhile the town consumes goods continuously — shops
+unlock every 3 days (up to 8) and buy every 4 turns. Anything nobody sells
+drifts <em>below</em> <code>I0</code> and its price <em>rises</em> all season.
+</p>
+
+<p>
+The shape function <code>f</code> decides whether a crop is a business or a
+one-shot prize:
+</p>
+
+<table>
+  <thead><tr><th>Crop</th><th>Curve</th><th class="num">Revenue @ 300 sold</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td>WHEAT</td><td><code>log</code></td><td class="num">$6,313</td><td>Effectively uncapped — still $20/unit</td></tr>
+    <tr><td>CARROT</td><td><code>sqrt</code></td><td class="num">$6,510</td><td>Mid</td></tr>
+    <tr><td>MELON</td><td><code>sq</code></td><td class="num">$26,627</td><td>Then <strong>$1 forever</strong> — a one-shot prize</td></tr>
+    <tr><td>STRAWBERRY</td><td><code>linear</code></td><td class="num">small</td><td>But 4 of 8 shops want it → scarcity premium reached $333</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+<p><strong>The insight the whole agent is built on:</strong> because prices move
+with supply and the town drains inventory over time, the right question is never
+"what is this crop worth today?" but <strong>"what will it be worth on the day it
+comes out of the ground?"</strong></p>
+</div>
+
+<h3>Two hard limits that shape the code</h3>
+<ul>
+  <li>The <strong>shed holds 100 items</strong>, and anything over that at end of day is <strong>silently discarded</strong>. Harvests sit in a worker's hands and only reach the shed at nightfall.</li>
+  <li>The season stops <strong>mid-day 29</strong>, so day 29 never gets an end-of-day. Anything still being carried then is worth zero.</li>
+</ul>
+</section>
+
+<!-- ══════════════════ 2 ══════════════════ -->
+<section>
+<h2><span class="num">2</span> The files at a glance</h2>
+
+<p class="lead">Seven Python files. Exactly one of them is the competition entry.</p>
+
+<table>
+  <thead><tr><th>File</th><th class="num">Lines</th><th>Role</th><th>Uploaded?</th></tr></thead>
+  <tbody>
+    <tr><td><code>main.py</code></td><td class="num">866</td><td><strong>The agent.</strong> The entire submission.</td><td><strong>Yes</strong></td></tr>
+    <tr><td><code>bench.py</code></td><td class="num">75</td><td>Parallel seeded benchmark — the scoreboard</td><td>No</td></tr>
+    <tr><td><code>tune.py</code></td><td class="num">41</td><td>Sweeps one parameter across values</td><td>No</td></tr>
+    <tr><td><code>trace.py</code></td><td class="num">61</td><td>Day-by-day narration of one game</td><td>No</td></tr>
+    <tr><td><code>actions.py</code></td><td class="num">74</td><td>Profiles where the crew's day goes</td><td>No</td></tr>
+    <tr><td><code>baselines/v12.py</code></td><td class="num">355</td><td>Frozen old agent, kept for regression checks</td><td>No</td></tr>
+    <tr><td><code>debug_wrapper.py</code></td><td class="num">28</td><td>Early ad-hoc debug script, now redundant</td><td>No</td></tr>
+  </tbody>
+</table>
+
+<h3>How they relate</h3>
+
+<div class="flow">
+                  ┌──────────────────────────────┐
+                  │   main.py — agent(obs)       │  ← the submission
+                  └──────────────┬───────────────┘
+                                 │  imported by all four tools
+        ┌───────────────┬────────┴────────┬────────────────┐
+        │               │                 │                │
+   bench.py         trace.py         actions.py        tune.py
+   "how good?"      "what did it     "where did the    "which value
+                     do each day?"    day go?"          is best?"
+        │                                                  │
+        └──────────────────► baselines/v12.py ◄────────────┘
+                             (regression opponent)
+</div>
+
+<div class="warn">
+<p><strong>Only <code>main.py</code> is submitted.</strong> Kaggle loads it by
+executing the file and taking the <em>last callable defined in it</em> —
+<code>[v for v in env.values() if callable(v)][-1]</code>. That is
+<code>agent</code>, on line 860. This is why <strong>nothing may be defined below
+<code>agent</code></strong>: a helper function added at the bottom would silently
+become the submitted agent.</p>
+</div>
+
+<h3>Why one file with no dependencies</h3>
+<p>
+<code>main.py</code> imports only <code>math</code> and <code>os</code> from the
+standard library. Nothing else is available on Kaggle's runner, so the price
+curves, crop timings and town model are all <strong>re-implemented from the
+engine source</strong> rather than read from it. That duplication is deliberate:
+it is what lets the agent forecast prices instead of merely reacting to them.
+</p>
+</section>
+
+<!-- ══════════════════ 3 ══════════════════ -->
+<section>
+<h2><span class="num">3</span> <span class="file">main.py</span> — the agent</h2>
+
+<p class="lead">
+One idea runs through the whole file: <strong>price every possible action in
+dollars, then give each worker the best-paying job it can reach.</strong>
+</p>
+
+<p>
+That reframing is what makes the code tractable. There is no hand-written
+strategy, no "on day 5, plant melon". Everything — harvesting, watering,
+digging, walking to the shed, buying land, hiring — is converted into a dollar
+figure and thrown into one auction.
+</p>
+
+<h3>Layout of the file</h3>
+
+<table>
+  <thead><tr><th class="num">Lines</th><th>Part</th><th>What lives there</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1–20</td><td>Docstring</td><td>The engine facts the design rests on</td></tr>
+    <tr><td class="num">25–94</td><td>Game model</td><td>Crops, price curves, shops, land prices, animals</td></tr>
+    <tr><td class="num">96–124</td><td>Tunables</td><td>~14 knobs, each overridable as an environment variable</td></tr>
+    <tr><td class="num">127–275</td><td>Pure helpers</td><td>Price maths, crop plans, town demand, distances</td></tr>
+    <tr><td class="num">278–857</td><td><code>_decide(obs)</code></td><td>The turn logic — everything happens here</td></tr>
+    <tr><td class="num">860–866</td><td><code>agent(obs)</code></td><td>Thin <code>try/except</code> wrapper. Must be last.</td></tr>
+  </tbody>
+</table>
+
+<h4>3.1 &nbsp; The game model (lines 25–94)</h4>
+
+<p>Plain dictionaries transcribed from the engine. For example:</p>
+
+<pre><code>CROPS = {
+    "WHEAT":  {"seed": 10, "first_yield_day": 2, "max_yield_day": 4,
+               "max_yield": 6, "ongoing": False},
+    "MELON":  {"seed": 80, "first_yield_day": 10, "max_yield_day": 12,
+               "max_yield": 6, "ongoing": False},
+    ...
+}</code></pre>
+
+<p>
+<code>SHOPS</code> lists which shop buys what, and <code>EXPECTED_PULL</code> is
+computed once at import: since shops are drawn uniformly <em>with replacement</em>,
+this gives the expected consumption of each item per shop per tick. Single-product
+shops pull double.
+</p>
+
+<h4>3.2 &nbsp; The tunables (lines 96–124)</h4>
+
+<pre><code>def _tune(name, default):
+    raw = os.environ.get("KAG_" + name)
+    return type(default)(raw) if raw is not None else default
+
+MAX_UNITS   = _tune("MAX_UNITS", 12)
+MOVE_COST   = _tune("MOVE_COST", 7.0)
+PORTER_FILL = _tune("PORTER_FILL", 0.6)</code></pre>
+
+<p>
+Small, but it is what made the project measurable. Every constant can be
+overridden from the shell, so <code>tune.py</code> can sweep any of them without
+editing a line of code. <strong>Every value in the table below was found by
+measurement, not judgement.</strong>
+</p>
+
+<table>
+  <thead><tr><th>Parameter</th><th class="num">Value</th><th>What the sweep showed</th></tr></thead>
+  <tbody>
+    <tr><td><code>MAX_UNITS</code></td><td class="num">12</td><td>8→$66k, 10→$69k, <strong>12→$69k</strong>, 14→$63k</td></tr>
+    <tr><td><code>TILES_PER_UNIT</code></td><td class="num">6.0</td><td>5→$48k (over-hires), 6→$71k, 8→$66k</td></tr>
+    <tr><td><code>MOVE_COST</code></td><td class="num">7.0</td><td>Flat from 3–7; 10→$48k, 15→$46k</td></tr>
+    <tr><td><code>SEED_RATION</code></td><td class="num">6</td><td>4→$62k, <strong>6→$77k</strong>, 10→$74k, 20→$68k</td></tr>
+    <tr><td><code>LAND_BUFFER</code></td><td class="num">800</td><td>200→$50k (starves seed buying); ≥400 all equal</td></tr>
+    <tr><td><code>PORTER_FILL</code></td><td class="num">0.6</td><td>+$2,202 versus disabled</td></tr>
+    <tr><td><code>MAX_GEESE</code></td><td class="num">0</td><td>4→−$10k, 8→−$17k, 16→−$25k</td></tr>
+  </tbody>
+</table>
+
+<h4>3.3 &nbsp; The pure helpers (lines 127–275)</h4>
+
+<p>Six functions do the economic reasoning. They are pure — same input, same output — which is why they can be reasoned about and tested in isolation.</p>
+
+<table>
+  <thead><tr><th>Function</th><th>What it answers</th></tr></thead>
+  <tbody>
+    <tr><td><code>market_price(item, inv)</code></td><td>An exact port of the engine's price curve. The foundation for everything else.</td></tr>
+    <tr><td><code>_build_crop_plans()</code></td><td>For each crop, the best age to harvest at and the yield reachable by then. Runs once at import.</td></tr>
+    <tr><td><code>daily_town_demand(shops, day, horizon)</code></td><td>How much the town will drain per day — <em>including shops that have not unlocked yet</em>.</td></tr>
+    <tr><td><code>batch_revenue(item, inv, n)</code></td><td>Revenue from selling <em>n</em> units, correctly accounting for the price falling as you go.</td></tr>
+    <tr><td><code>sellable_count(item, inv, have, reserve)</code></td><td>How many to sell before the marginal price drops below the reserve.</td></tr>
+    <tr><td><code>step_toward(x, y, tx, ty)</code></td><td>One step. No pathfinding needed — nothing blocks movement.</td></tr>
+  </tbody>
+</table>
+
+<p><code>_build_crop_plans()</code> is a good example of derivation replacing guesswork. Watering only adds yield inside a window <code>[⌈max_yield_day/2⌉, max_yield_day]</code>, so the function computes the earliest age at which a plant already carries its full yield:</p>
+
+<pre><code>window_start = (cd["max_yield_day"] + 1) // 2
+units = min(cd["max_yield"], 1 + (cd["max_yield_day"] - window_start + 1))</code></pre>
+
+<p>The results — WHEAT harvest at age 4 for 4 units, MELON at 10 for 6, STRAWBERRY at 16 for 4 — were then verified against real games.</p>
+</section>
+
+<!-- ══════════════════ 4 ══════════════════ -->
+<section>
+<h2><span class="num">4</span> <span class="file">_decide()</span> — one turn, step by step</h2>
+
+<p class="lead">
+The 580-line core. It runs 720 times per game and takes about 4.6 ms, against a
+1,000 ms limit.
+</p>
+
+<ol class="steps">
+
+<li><b>Scan the farm &nbsp;<span class="mono">(line 305)</span></b>
+Walk all 100 tiles once, sorting them into empties, weeds, and plants. At the
+same time total the <strong>pipeline</strong>: everything of each type we own but
+have not yet sold — growing, in the shed, and in workers' hands. This number is
+what stops the agent flooding its own market later.</li>
+
+<li><b>Value the crops &nbsp;<span class="mono">(line 369)</span></b>
+The most important idea in the file. A planting is priced against the inventory
+it will <em>face at harvest</em>, not today's:
+<pre><code>drawdown = demand_over(cycle)[crop] * cycle
+start   = today_inventory − drawdown + our_pipeline
+profit  = batch_revenue(crop, start, plan["units"]) − seed_cost</code></pre>
+The <code>drawdown</code> term is what discovers scarcity premiums; the
+<code>pipeline</code> term is what prevents self-flooding.</li>
+
+<li><b>Rank the crops &nbsp;<span class="mono">(line 405)</span></b>
+Profit alone is the wrong ranking, because <em>which resource is scarce changes
+during the game</em>. On day 0 land is free and cash is tight, so a $100
+strawberry seed is a trap. By day 15 cash is ample and every tile-day counts —
+the opposite answer. Charging seed cost against cash-per-free-tile interpolates
+between the two automatically:
+<pre><code>cash_per_tile = (money − CASH_FLOOR) / len(empties)
+score = profit / (cycle * (1 + seed_cost / cash_per_tile))</code></pre>
+<strong>This single change was worth +$3,700 per game.</strong></li>
+
+<li><b>Build the job list &nbsp;<span class="mono">(line 462)</span></b>
+Every possible action becomes a priced entry. A harvest is worth its produce
+plus half the value of the tile it frees:
+<pre><code>add(yield_units * price_of(crop) + tile_unlock_value * 0.5, x, y, ["HARVEST"])</code></pre>
+Watering is priced twice over — once for the yield it adds inside the window,
+once for the death it prevents outside it. Digging a weed is priced at the value
+of the tile it returns. Each job also carries a <code>need</code> (an item the
+worker must already hold), an optional <code>unit</code> pin, and a
+<code>key</code> naming what two jobs may not share this turn.</li>
+
+<li><b>Shed runs &nbsp;<span class="mono">(line 598)</span></b>
+<span class="tag ship">shipped this session</span>
+Goods only reach the shed at nightfall, and overflow past 100 is destroyed. So
+once the day's haul is outgrowing the shed, workers carry produce there
+mid-day where the sell orders can drain it. Detailed in §5.</li>
+
+<li><b>Assign workers to jobs &nbsp;<span class="mono">(line 648)</span></b>
+Rank <em>every</em> (worker, job) pair and take them greedily:
+<pre><code>pairs.append((value / (dist + 1.0), unit_idx, job_idx))
+pairs.sort(key=lambda p: -p[0])</code></pre>
+Dividing by distance means a worker prefers a decent job at its feet over a great
+one across the farm. Jobs whose value does not survive the walk
+(<code>value − dist × MOVE_COST ≤ 0</code>) are never offered at all. Once a job
+is taken its <code>key</code> is claimed so nobody duplicates it.</li>
+
+<li><b>Turn assignments into actions &nbsp;<span class="mono">(line 709)</span></b>
+A worker not yet standing on its target emits a movement step; one that has
+arrived emits the operation. <code>PLANT</code> is special — the crop is chosen
+at <em>execution</em> time from a decrementing seed counter, because the engine
+<strong>discards every planting of a crop</strong> if you queue more than you
+hold seeds for.</li>
+
+<li><b>Market orders &nbsp;<span class="mono">(line 733)</span></b>
+Orders resolve in list order, so selling comes first and funds everything after
+it: <code>SELL → BUY_LAND → HIRE → BUY_SEED</code>. The sell logic holds stock
+back while the price is below <code>RESERVE_FRAC × base</code>, and relaxes that
+reserve as the season closes (0.15 with four days left, 0 on the last).</li>
+
+</ol>
+
+<h3>Two invariants that must not be broken</h3>
+<ul>
+  <li><strong>Never queue more <code>PLANT</code> ops for a crop than seeds held</strong> — the engine drops <em>all</em> of that crop's plantings for the turn.</li>
+  <li><strong>Never plant beyond <code>crew × PLANTS_PER_UNIT</code></strong> — an unwatered plant is not merely a wasted seed, it becomes a weed that then costs a DIG to remove.</li>
+</ul>
+
+<h3>The wrapper (line 860)</h3>
+<pre><code>def agent(obs):
+    try:
+        return _decide(obs)
+    except Exception:
+        if DEBUG:
+            raise
+        return {"farmer": ["PASS"], "hands": [], "market": []}</code></pre>
+<p>
+On Kaggle a raised exception forfeits the game, so the wrapper degrades to a safe
+no-op instead. During development <code>KAG_DEBUG=1</code> disables the catch —
+without it, a crashing agent is indistinguishable from a merely bad one.
+</p>
+</section>
+
+<!-- ══════════════════ 5 ══════════════════ -->
+<section>
+<h2><span class="num">5</span> The two experiments this session</h2>
+
+<p class="lead">One shipped, one was measured and switched off. Both are results.</p>
+
+<h3>Mid-day porter runs <span class="tag ship">shipped · +$2,202</span></h3>
+
+<p>
+<strong>The problem.</strong> Harvested goods sit in a worker's hands and only
+reach the shed at end of day. The shed caps at 100 items and everything past that
+is <strong>silently discarded</strong>. On strong days the farm was out-producing
+its own storage and quietly throwing away the surplus.
+</p>
+
+<p>
+<strong>The fix.</strong> Once the shed is projected past 60% full, workers make
+delivery runs <em>during</em> the day, so the sell orders can drain it before
+nightfall:
+</p>
+
+<pre><code>crowded = shed_fill + incoming &gt; SHED_CAP * PORTER_FILL
+if last_day or (crowded and shed_fill &lt; SHED_CAP):
+    worth = sum(market_price(i, minv[i]) * q for i, q in inv.items() ...)
+    add(worth + 1e6 if last_day else worth * 0.6, tx, ty, ["DROP", idx],
+        unit=idx, key=(tx, ty, "DROP"))</code></pre>
+
+<p>
+The job is <em>pinned</em> to the worker holding the goods (<code>unit=idx</code>) —
+nobody else can carry someone's hands to the shed. On the last day the value is
+inflated by <code>1e6</code> to force the run, since unsold carried goods score zero.
+</p>
+
+<table>
+  <thead><tr><th>48 paired seeds vs <code>pass</code></th><th class="num">Mean</th><th class="num">Median</th><th class="num">Minimum</th></tr></thead>
+  <tbody>
+    <tr><td>Porter runs <strong>on</strong></td><td class="num">$78,475</td><td class="num">$79,689</td><td class="num">$48,171</td></tr>
+    <tr><td>Porter runs <strong>off</strong></td><td class="num">$76,273</td><td class="num">$76,503</td><td class="num">$43,547</td></tr>
+    <tr><td><strong>Difference</strong></td><td class="num"><strong>+$2,202</strong></td><td class="num"><strong>+$3,186</strong></td><td class="num"><strong>+$4,624</strong></td></tr>
+  </tbody>
+</table>
+
+<p>
+It lifts the <em>floor</em> harder than the mean, which is exactly the expected
+signature: it pays in precisely those games where production overran the shed.
+</p>
+
+<div class="warn">
+<p><strong>A lesson about sample size.</strong> Measured on 16 seeds this change
+looked <em>negative</em>: −$889 on one seed window, +$2,568 on another. Only at
+n=48 did the real effect emerge. Game-to-game variation is roughly $11,000, so
+small samples can and do point the wrong way.</p>
+</div>
+
+<h3>The goose / egg engine <span class="tag off">built, measured, disabled</span></h3>
+
+<p>
+The previous handoff called livestock "the largest single remaining lever". It
+was implemented in full — coops built, birds bought, fetched from the shed,
+placed, fed, cared for, harvested, fertilizer collected. Then it was measured:
+</p>
+
+<table>
+  <thead><tr><th><code>MAX_GEESE</code></th><th class="num">0</th><th class="num">4</th><th class="num">8</th><th class="num">16</th></tr></thead>
+  <tbody><tr><td>Mean score</td><td class="num"><strong>$79,472</strong></td><td class="num">$69,309</td><td class="num">$62,858</td><td class="num">$54,027</td></tr></tbody>
+</table>
+
+<p>
+<strong>Why the original estimate was wrong.</strong> The case for geese was
+"~$80 per tile-day versus wheat's ~$22" — arithmetic per <em>tile</em>. But tiles
+are not the binding constraint; <strong>worker-actions are</strong>. A goose
+grosses about $150/day, but collecting it takes FEED + CARE + COLLECT + part of a
+HARVEST, each on the coop tile, with a walk between every one. At roughly seven
+actions per bird per day, sixteen birds consume more than half the crew's entire
+day — and traces showed it still only managing to feed 7–11 of them.
+</p>
+
+<p>
+It ships behind <code>MAX_GEESE = 0</code>, complete and ready, should the
+walking problem ever be solved. The alternative explanation — that the
+<code>GOOSE_UPKEEP</code> term was double-charging crew capacity — was tested
+directly and ruled out (a −112 difference, i.e. noise).
+</p>
+
+<div class="note">
+<p><strong>Why this counts as a good outcome.</strong> The feature works
+correctly; it simply does not pay. Knowing that with measured numbers is worth
+more than shipping it on the strength of a plausible-sounding estimate — and the
+diagnosis (<em>actions, not tiles, are scarce</em>) is now the single most useful
+fact guiding what to do next.</p>
+</div>
+</section>
+
+<!-- ══════════════════ 6 ══════════════════ -->
+<section>
+<h2><span class="num">6</span> The four measurement tools</h2>
+
+<p class="lead">
+None of these are submitted. They exist so that no change was ever shipped on
+opinion.
+</p>
+
+<h3><span class="file">bench.py</span> <span class="tag tool">the scoreboard</span> &mdash; 75 lines</h3>
+
+<p>Plays many games in parallel on <strong>fixed seeds</strong> and reports the distribution.</p>
+
+<pre><code>uv run bench.py --opp pass -n 48 --workers 16          # ~29 seconds
+uv run bench.py --opp baselines/v12.py -n 10 --swap    # regression, both seats</code></pre>
+
+<p>Three design choices matter:</p>
+<ul>
+  <li><strong>Fixed seeds.</strong> Seeds run from <code>--seed0</code> upward, so two versions face identical games. This is <em>paired</em> comparison, and it removes most of the noise.</li>
+  <li><strong><code>--swap</code>.</strong> Replays every seed with the seats exchanged, cancelling any first-player advantage.</li>
+  <li><strong>A <code>ProcessPoolExecutor</code>.</strong> One game costs ~4.6 s of CPU; 16 workers give ~1.7 games/second.</li>
+</ul>
+
+<p>It prints mean, median, min, max, standard deviation and winrate. The <strong>minimum</strong> matters as much as the mean — the difference between a strategy that is good on average and one that is reliable.</p>
+
+<div class="warn">
+<p><strong>Always benchmark against <code>pass</code>, never <code>random</code>.</strong>
+The built-in random agent calls <code>random.Random()</code> with no seed, so it
+behaves differently every run — about 3.5% of noise, enough to drown a real
+$2,000 improvement.</p>
+</div>
+
+<h3><span class="file">tune.py</span> <span class="tag tool">the parameter sweep</span> &mdash; 41 lines</h3>
+
+<pre><code>uv run tune.py MAX_UNITS 10 12 14
+
+    baseline  $   69,000              ← output format; the
+MAX_UNITS=10  $   69,000        −0      measured result of this
+MAX_UNITS=12  $   69,000        +0      sweep was 10→$69k, 12→$69k,
+MAX_UNITS=14  $   63,000    −6,000      14→$63k</code></pre>
+
+<p>
+It scores a baseline, then re-runs <code>bench.py</code> as a subprocess once per
+value with <code>KAG_&lt;NAME&gt;</code> set in the environment, always on the same
+seeds. Every number in the tunables table of §3.2 came out of this. It is short
+only because <code>_tune()</code> in <code>main.py</code> did the hard part.
+</p>
+
+<h3><span class="file">trace.py</span> <span class="tag tool">the narrator</span> &mdash; 61 lines</h3>
+
+<p>Wraps <code>agent</code>, and at one chosen hour each day prints a line of state — the shape of the output is:</p>
+
+<pre><code>D&lt;day&gt; $&lt;money&gt; hands=&lt;n&gt; land=&lt;quadrants&gt; free=&lt;empty tiles&gt; weed=&lt;n&gt;
+       birds=&lt;placed&gt;/&lt;coops&gt; plants={crop: count} seeds={crop: count}
+       shed={item: qty} px={item: current market price}</code></pre>
+
+<p>
+This is the tool for <em>why</em>. A benchmark says a change lost $5,000; a trace
+shows the money pinned at $185 for six days because the agent bought birds before
+it bought land.
+</p>
+
+<h3><span class="file">actions.py</span> <span class="tag tool">the profiler</span> &mdash; 74 lines</h3>
+
+<p>
+Counts every action the crew issues, grouped by operation. Written specifically
+to answer why the geese lost money — and it produced the session's most important
+number:
+</p>
+
+<table>
+  <thead><tr><th>Operation</th><th class="num">Share of all worker-actions</th></tr></thead>
+  <tbody>
+    <tr><td><strong>MOVE</strong> (walking)</td><td class="num"><strong>51.7%</strong></td></tr>
+    <tr><td><strong>PASS</strong> (idle)</td><td class="num"><strong>11.5%</strong></td></tr>
+    <tr><td>FEED</td><td class="num">2.0%</td></tr>
+    <tr><td>CARE</td><td class="num">1.6%</td></tr>
+  </tbody>
+</table>
+
+<p>
+More than half of everything the crew does is <em>walking</em>. That single
+figure explains the goose result, and it makes routing the biggest remaining
+opportunity in the project.
+</p>
+
+<div class="note">
+<p><strong>Reach for <code>actions.py</code> whenever a change looks economically
+sound but does not pay.</strong> A job that prices well per action can still lose
+money once the walk to it is counted.</p>
+</div>
+
+<h3><span class="file">baselines/v12.py</span> &mdash; 355 lines</h3>
+<p>
+The previous agent, frozen. It is never edited — it exists so that
+<code>--opp baselines/v12.py --swap</code> can confirm no refactor has quietly
+regressed. Current agent: <strong>20 wins from 20</strong> across both seats.
+</p>
+
+<h3><span class="file">debug_wrapper.py</span> &mdash; 28 lines</h3>
+<p>
+The earliest debugging script, from before <code>trace.py</code> existed. Fully
+superseded and safe to delete; kept only for history.
+</p>
+</section>
+
+<!-- ══════════════════ 7 ══════════════════ -->
+<section>
+<h2><span class="num">7</span> Results, and what remains</h2>
+
+<h3>Where the agent stands</h3>
+
+<table>
+  <thead><tr><th>Opponent</th><th class="num">Games</th><th class="num">Mean</th><th class="num">Median</th><th class="num">Minimum</th><th class="num">Winrate</th></tr></thead>
+  <tbody>
+    <tr><td><code>random</code></td><td class="num">16</td><td class="num"><strong>$81,166</strong></td><td class="num">$80,938</td><td class="num">$72,201</td><td class="num">16/16</td></tr>
+    <tr><td><code>pass</code> (deterministic)</td><td class="num">48</td><td class="num"><strong>$78,475</strong></td><td class="num">$79,689</td><td class="num">$48,171</td><td class="num">48/48</td></tr>
+    <tr><td>v12, both seats</td><td class="num">20</td><td class="num"><strong>$74,635</strong></td><td class="num">$73,885</td><td class="num">$55,793</td><td class="num">20/20</td></tr>
+  </tbody>
+</table>
+
+<p>
+The previous version scored <strong>$4,464</strong>. The current agent is about
+<strong>18&times;</strong> that, and uses 4.6 ms of its 1,000 ms per-turn budget —
+so there is a great deal of compute headroom still unspent.
+</p>
+
+<h3>The changes that produced the gain</h3>
+<table>
+  <thead><tr><th>Change</th><th class="num">Worth</th></tr></thead>
+  <tbody>
+    <tr><td>Rewriting valuation to forecast harvest-day prices</td><td class="num">bulk of the gain</td></tr>
+    <tr><td>Ranking crops against whichever resource is scarce</td><td class="num">+$3,700</td></tr>
+    <tr><td>Modelling the town's drawdown (scarcity premiums)</td><td class="num">+$2,000</td></tr>
+    <tr><td>Mid-day porter runs</td><td class="num">+$2,202</td></tr>
+    <tr><td>Skipping redundant waterings outside the yield window</td><td class="num">large, frees crew time</td></tr>
+  </tbody>
+</table>
+
+<h3>What is still open</h3>
+
+<ol>
+  <li><strong>Cut the walking.</strong> 51.7% of actions are moves and 11.5% are idle. Assignment is greedy per-turn with no notion of a route, so workers criss-cross the farm. This is the biggest remaining lever <em>and</em> the precondition for livestock ever paying.</li>
+  <li><strong>Land timing.</strong> Quadrants 3 and 4 still arrive around day 11 because cash is tied up in melon seeds until the day-10 harvest. Reserving toward the next land price is likely worth thousands.</li>
+  <li><strong>Self-play validation.</strong> Everything so far is measured against opponents that barely touch the shared market. A real competitor chasing the same scarcity premiums will change crop valuations.</li>
+  <li><strong>The panic-dump rule is mispriced</strong> <em>(a known defect)</em>. When the shed is nearly full the reserve drops to 0.05 and the agent sells almost anything at almost any price — traces showed melon dumped at <strong>$4</strong> against a $250 base. Overflow really is destroyed, so the rule is right in principle, but it should dump the <em>cheapest</em> items rather than everything.</li>
+</ol>
+
+<h3>Submitting</h3>
+<pre><code>Kaggle → Submit to Competition → File Upload → Browse Files → main.py</code></pre>
+<p>
+A single file, not an archive. The zip option exists for agents split across
+several modules, which would then need <code>main.py</code> at the archive root.
+Verified through Kaggle's exact loading path: loaded as a file rather than an
+imported module it scores $77,114 over 8 games, matching the module numbers.
+</p>
+
+<div class="warn">
+<p><strong>Running <code>python main.py</code> prints nothing, and that is
+correct.</strong> It is the agent <em>module</em>, not a program — it defines
+constants and functions and exits. Silence with exit code 0 means the file is
+healthy. To watch it actually play, use <code>trace.py</code>; to score it, use
+<code>bench.py</code>.</p>
+</div>
+
+<div class="footer-note">
+Kaggriculture · branch <code>KA-agent</code> · every figure in this document was
+measured with <code>bench.py</code> over fixed seeds, not estimated.<br>
+Companion documents: <code>PROJECT_STATUS.md</code> (status and runbook) ·
+<code>kaggriculture_handoff.md</code> (engine internals and design rationale).
+</div>
+</section>
+
+</body>
+</html>

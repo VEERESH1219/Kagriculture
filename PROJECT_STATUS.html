@@ -230,7 +230,6 @@
   <p class="standfirst">An agent that prices every possible action in dollars, then sends each farm hand to whichever job pays best for the steps it takes to get there.</p>
   <div class="meta">
     <span>branch KA-agent</span>
-    <span>commit 0a5f716</span>
     <span>30-day season · 720 turns</span>
   </div>
 </header>
@@ -263,6 +262,8 @@
   </div>
 
   <p class="prose"><strong>Nothing else gets uploaded.</strong> <code>bench.py</code>, <code>tune.py</code>, <code>trace.py</code>, <code>actions.py</code>, <code>baselines/</code> and the docs are local tooling.</p>
+
+  <p class="prose">For <strong>how the code actually works</strong> — every <code>.py</code> file explained and the turn logic step by step — see <code>CODE_GUIDE.pdf</code> (13 pages, source <code>CODE_GUIDE.html</code>). This page is status; that one is understanding.</p>
 </section>
 
 <section>
@@ -440,14 +441,14 @@ KAG_PORTER_FILL=10 uv run bench.py --opp pass -n 48   <span class="cmt"># porter
       <span class="rank">05</span>
       <div>
         <h4>Housekeeping</h4>
-        <p>The commits are <strong>unpushed</strong> — <code>KA-agent</code> is 3 ahead of <code>origin</code>. <code>debug_wrapper.py</code> is redundant with <code>actions.py</code> and can be dropped whenever.</p>
+        <p><strong><code>main.py</code> has not been submitted to Kaggle yet</strong> — the work is committed and pushed, the submission is the outstanding step. Separately, <code>debug_wrapper.py</code> is redundant with <code>actions.py</code> and can be dropped whenever.</p>
       </div>
     </li>
   </ol>
 </section>
 
 <footer>
-  Kaggriculture · branch KA-agent · commit 0a5f716 · all figures from bench.py over fixed seeds
+  Kaggriculture · branch KA-agent · all figures from bench.py over fixed seeds
 </footer>
 
 </div>

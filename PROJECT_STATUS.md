@@ -10,6 +10,16 @@ seeds, not estimated.
 >
 > **This `.md` is the source of truth.** If you change something here,
 > regenerate the HTML rather than hand-editing it, or the two will drift.
+>
+> 📘 For **how the code actually works** — every `.py` file explained, the turn
+> logic step by step — see **`CODE_GUIDE.pdf`** (13 pages, source
+> `CODE_GUIDE.html`). This document is status; that one is understanding.
+> Re-render it after editing the HTML with:
+>
+> ```bash
+> google-chrome --headless --no-pdf-header-footer \
+>   --print-to-pdf=CODE_GUIDE.pdf CODE_GUIDE.html
+> ```
 
 ---
 
@@ -223,8 +233,9 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 
 **Housekeeping**
 
-6. The commits are **unpushed** — `KA-agent` is ahead of `origin/KA-agent`.
-7. `debug_wrapper.py` is redundant with `actions.py`/`trace.py`; drop it whenever.
+6. `debug_wrapper.py` is redundant with `actions.py`/`trace.py`; drop it whenever.
+7. **`main.py` has not been submitted to Kaggle yet.** The work is committed and
+   pushed; the submission is the outstanding step.
 
 ---
 
@@ -241,4 +252,6 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 | `kaggriculture_handoff.md` | Deep technical handoff (engine facts, design) | — |
 | `PROJECT_STATUS.md` | This document — **source of truth** | — |
 | `PROJECT_STATUS.html` | Formatted, self-contained rendering of this document | — |
+| `CODE_GUIDE.pdf` | **Code walkthrough** — every `.py` file explained, 13 pages | — |
+| `CODE_GUIDE.html` | Source for the PDF; re-render with headless Chrome | — |
 | `debug_wrapper.py` | Old ad-hoc debug script, redundant | — |
