@@ -10,6 +10,17 @@ over fixed seeds, not estimated.
 | vs `random` | 16 | **$81,166** | $80,938 | $72,201 | 16/16 |
 | vs `pass` (deterministic, used for tuning) | 48 | $78,475 | $79,689 | $48,171 | 48/48 |
 | vs old **v12** agent, both seats | 20 | **$74,635** | $73,885 | $55,793 | 20/20 |
+| **self-play**, both seats | 16 | **$43,841** | $44,334 | $23,881 | n/a — mirror |
+
+**The self-play row is the only contested-market number, and it is the one to
+trust.** Every other opponent barely sells, so we alone drain the town and take
+every scarcity premium. Against a real competitor the score falls **44%**. Do
+not quote $78k as an expected result.
+
+Its winrate is meaningless: the agent is deterministic, so against a copy of
+itself it mirrors exactly and ties on ~2/3 of seeds; `bench.py` counts a tie as
+a non-win and prints `3/16`. Verified per-seed — 1000, 1001, 1002 and 1004 are
+exact ties to the dollar; 1003 and 1005 diverge.
 
 Previous v12 baseline: **$4,464** mean vs `random`. Current agent is ~18x that.
 Runtime is 4.6 ms/turn against a 1000 ms `actTimeout`, so there is a lot of
@@ -154,10 +165,16 @@ Swept one at a time vs `pass`, 16 seeds. Current values in `main.py`:
 
 ## Next steps, highest expected value first
 
-1. **Self-play validation.** Everything so far is measured against `random`,
-   `pass`, and v12 — all of which barely touch the shared market. A real
-   opponent competing for the same scarcity premiums will change crop
-   valuations. Run `bench.py --agent main:agent --opp main.py --swap`.
+1. **Price the opponent's supply.** Self-play has now been run, and it costs
+   **44% of the score** ($43,841 vs $78,475). `crop_profit` is the prime
+   suspect: it starts from `minv − town_drawdown + our_pipeline` and has **no
+   term for what the opponent will sell into the same inventory**. Every crop is
+   overvalued in a contested game, and the bias is worst precisely on the crops
+   we favour most — the fat scarcity premiums are fat because *nobody* is
+   selling, an assumption a real rival breaks. Cheapest first cut: assume a
+   symmetric opponent and double the `pipeline` term in `crop_profit`, then
+   measure with `--opp main.py --swap`. Worth ~$35k/game, and it is the only
+   item on this list measured against a real opponent.
 2. **Land timing.** Quadrants 3 and 4 are still bought around day 11 because
    cash is tied up in melon seeds until the day-10 harvest. Reserving toward the
    next land price, or deferring melon, is probably worth several thousand.

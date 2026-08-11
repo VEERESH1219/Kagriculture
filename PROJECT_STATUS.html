@@ -284,9 +284,21 @@
         <tr><td>vs <code>random</code></td><td class="num">16</td><td class="num big">$81,166</td><td class="num">$80,938</td><td class="num">$72,201</td><td class="num">16/16</td></tr>
         <tr><td>vs <code>pass</code> <span class="note">(deterministic — tune against this)</span></td><td class="num">48</td><td class="num big">$78,475</td><td class="num">$79,689</td><td class="num">$48,171</td><td class="num">48/48</td></tr>
         <tr><td>vs <strong>v12</strong>, both seats</td><td class="num">20</td><td class="num big">$74,635</td><td class="num">$73,885</td><td class="num">$55,793</td><td class="num">20/20</td></tr>
+        <tr><td><strong>self-play</strong>, both seats</td><td class="num">16</td><td class="num big">$43,841</td><td class="num">$44,334</td><td class="num">$23,881</td><td class="num">mirror</td></tr>
       </tbody>
     </table>
   </div>
+
+  <div class="warn" style="margin-top:1.25rem">
+    <span class="lbl">Quote the self-play number, not the $78k</span>
+    <p><strong>$78,475 is a benchmark, not a forecast.</strong> Against an opponent that genuinely competes for the shared market the score falls <strong>44%</strong>, to about $44k. Every other row is against an opponent that barely sells, so our agent alone drains the town’s demand and collects every scarcity premium. Do not report $78k as an expected leaderboard result.</p>
+    <p>The winrate is meaningless for self-play: the agent is deterministic, so against a copy of itself it plays a <strong>mirror match</strong> and finishes on identical dollars. About two-thirds of seeds tie exactly, and <code>bench.py</code> scores a tie as a non-win — which is why it prints <code>3/16 = 19%</code>.</p>
+<pre><code>uv run bench.py --agent main:agent --opp main.py --swap -n 8 --workers 16
+
+seed 1000:  seat0 $23,881   seat1 $23,881   TIE
+seed 1003:  seat0 $48,745   seat1 $60,640   seat1</code></pre>
+  </div>
+
   <p class="prose note" style="white-space:normal">Runtime is 4.6 ms/turn against a 1000 ms <code>actTimeout</code> — there is a great deal of compute headroom left.</p>
 </section>
 
@@ -412,29 +424,29 @@ KAG_PORTER_FILL=10 uv run bench.py --opp pass -n 48   <span class="cmt"># porter
     <li>
       <span class="rank">01</span>
       <div>
+        <h4>Price the opponent’s supply <span class="verdict v-bug">worth ~$35k</span></h4>
+        <p>Self-play costs <strong>44% of the score</strong>, and <code>crop_profit</code> is the prime suspect: it prices a planting at <code>today − town_drawdown + our_pipeline</code>, with <strong>no term for what the opponent sells into the same inventory</strong>. Every crop is overvalued in a contested game, and the bias is worst on exactly the crops we favour — a scarcity premium is fat because <em>nobody</em> is selling, an assumption a real rival breaks. Cheapest first cut: assume a symmetric opponent, double the pipeline term, measure. The only item here measured against a real opponent.</p>
+      </div>
+    </li>
+    <li>
+      <span class="rank">02</span>
+      <div>
         <h4>Cut the walking</h4>
         <p>51.7% of unit-actions are moves; another 11.5% are <code>PASS</code>. Assignment is greedy per-turn with no notion of a route, so units criss-cross the farm. Biggest remaining lever on the crop engine — and the precondition for the flock ever paying.</p>
       </div>
     </li>
     <li>
-      <span class="rank">02</span>
+      <span class="rank">03</span>
       <div>
         <h4>The panic-dump rule is mispriced <span class="verdict v-bug">defect</span></h4>
         <p>When <code>shed_fill + incoming &gt; SHED_CAP − 10</code>, <code>reserve_frac</code> drops to 0.05 and the agent sells anything at almost any price. Flock traces showed it dumping melon at <strong>$4</strong> against a $250 base. Overflow really is discarded so the rule is right in principle, but it should dump the <em>cheapest</em> items, not everything. Fires without geese too, whenever crop throughput is high.</p>
       </div>
     </li>
     <li>
-      <span class="rank">03</span>
+      <span class="rank">04</span>
       <div>
         <h4>Land timing</h4>
         <p>Quadrants 3 and 4 still land around day 11 because cash is tied up in melon seeds until the day-10 harvest. Reserving toward the next land price is probably worth several thousand.</p>
-      </div>
-    </li>
-    <li>
-      <span class="rank">04</span>
-      <div>
-        <h4>Self-play validation</h4>
-        <p>Everything is measured against <code>random</code>, <code>pass</code> and v12, none of which really compete for the shared market. A real opponent chasing the same scarcity premiums would change crop valuations. Run <code>bench.py --agent main:agent --opp main.py --swap</code>.</p>
       </div>
     </li>
     <li>

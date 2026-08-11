@@ -176,9 +176,9 @@
 
   <div class="scorecard">
     <div><div class="n">866</div><div class="l">lines in main.py</div></div>
-    <div><div class="n">$78,475</div><div class="l">mean score</div></div>
+    <div><div class="n">$78,475</div><div class="l">vs a passive opponent</div></div>
+    <div><div class="n">$43,841</div><div class="l">in self-play</div></div>
     <div><div class="n">18&times;</div><div class="l">vs previous version</div></div>
-    <div><div class="n">100%</div><div class="l">winrate, 84 games</div></div>
   </div>
 
   <div class="meta">
@@ -724,6 +724,7 @@ superseded and safe to delete; kept only for history.
     <tr><td><code>random</code></td><td class="num">16</td><td class="num"><strong>$81,166</strong></td><td class="num">$80,938</td><td class="num">$72,201</td><td class="num">16/16</td></tr>
     <tr><td><code>pass</code> (deterministic)</td><td class="num">48</td><td class="num"><strong>$78,475</strong></td><td class="num">$79,689</td><td class="num">$48,171</td><td class="num">48/48</td></tr>
     <tr><td>v12, both seats</td><td class="num">20</td><td class="num"><strong>$74,635</strong></td><td class="num">$73,885</td><td class="num">$55,793</td><td class="num">20/20</td></tr>
+    <tr><td><strong>Self-play</strong>, both seats</td><td class="num">16</td><td class="num"><strong>$43,841</strong></td><td class="num">$44,334</td><td class="num">$23,881</td><td class="num">mirror</td></tr>
   </tbody>
 </table>
 
@@ -732,6 +733,18 @@ The previous version scored <strong>$4,464</strong>. The current agent is about
 <strong>18&times;</strong> that, and uses 4.6 ms of its 1,000 ms per-turn budget —
 so there is a great deal of compute headroom still unspent.
 </p>
+
+<div class="warn">
+<p><strong>The self-play row is the one to quote — $78,475 is a benchmark, not a
+forecast.</strong> The first three opponents barely sell anything, so our agent
+alone drains the town's demand and collects every scarcity premium. Against an
+opponent that genuinely competes for the shared market the score falls
+<strong>44%</strong>, to about $44k.</p>
+<p>Its winrate column is blank because the figure would mislead: the agent is
+deterministic, so against a copy of itself it plays a <em>mirror match</em> and
+finishes on identical dollars. About two-thirds of seeds tie to the dollar, and
+<code>bench.py</code> counts a tie as a non-win.</p>
+</div>
 
 <h3>The changes that produced the gain</h3>
 <table>
@@ -748,9 +761,9 @@ so there is a great deal of compute headroom still unspent.
 <h3>What is still open</h3>
 
 <ol>
-  <li><strong>Cut the walking.</strong> 51.7% of actions are moves and 11.5% are idle. Assignment is greedy per-turn with no notion of a route, so workers criss-cross the farm. This is the biggest remaining lever <em>and</em> the precondition for livestock ever paying.</li>
+  <li><strong>Price the opponent's supply.</strong> Self-play costs 44% of the score, and <code>crop_profit</code> is the prime suspect: it starts from <code>today − town_drawdown + our_pipeline</code> and has <strong>no term for what the opponent sells into the same inventory</strong>. Every crop is overvalued in a contested game, and the bias is worst on exactly the crops the agent favours most — a scarcity premium is large precisely because <em>nobody</em> is selling, which is the assumption a real rival breaks. Worth roughly $35,000 a game, and the only item on this list measured against a real opponent.</li>
+  <li><strong>Cut the walking.</strong> 51.7% of actions are moves and 11.5% are idle. Assignment is greedy per-turn with no notion of a route, so workers criss-cross the farm. The biggest remaining lever on the crop engine <em>and</em> the precondition for livestock ever paying.</li>
   <li><strong>Land timing.</strong> Quadrants 3 and 4 still arrive around day 11 because cash is tied up in melon seeds until the day-10 harvest. Reserving toward the next land price is likely worth thousands.</li>
-  <li><strong>Self-play validation.</strong> Everything so far is measured against opponents that barely touch the shared market. A real competitor chasing the same scarcity premiums will change crop valuations.</li>
   <li><strong>The panic-dump rule is mispriced</strong> <em>(a known defect)</em>. When the shed is nearly full the reserve drops to 0.05 and the agent sells almost anything at almost any price — traces showed melon dumped at <strong>$4</strong> against a $250 base. Overflow really is destroyed, so the rule is right in principle, but it should dump the <em>cheapest</em> items rather than everything.</li>
 </ol>
 

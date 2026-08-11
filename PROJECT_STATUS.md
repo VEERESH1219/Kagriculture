@@ -65,10 +65,36 @@ Verified against the exact path Kaggle uses:
 | vs `random` | 16 | **$81,166** | $80,938 | $72,201 | 16/16 |
 | vs `pass` (deterministic, used for tuning) | 48 | **$78,475** | $79,689 | $48,171 | 48/48 |
 | vs old **v12** agent, both seats | 20 | **$74,635** | $73,885 | $55,793 | 20/20 |
+| **self-play**, both seats | 16 | **$43,841** | $44,334 | $23,881 | see below |
 
 The v12 agent scored **$4,464** vs `random`. Current agent is ~18x that.
 Runtime is 4.6 ms/turn against a 1000 ms `actTimeout`, so there is a lot of
 compute headroom left.
+
+### ⚠️ The self-play number is the one to quote
+
+**$78,475 is a benchmark, not a forecast.** Against an opponent that genuinely
+competes for the shared market, the score falls **44%**, to ~$44k. Every other
+row in that table is against an opponent that barely sells anything, so our
+agent alone drains the town's demand and collects every scarcity premium.
+
+Do not report $78k as an expected leaderboard result.
+
+The winrate column is meaningless for self-play: the agent is deterministic, so
+against a copy of itself it plays a **mirror match** and finishes on identical
+dollars. Roughly two-thirds of seeds are exact ties, and `bench.py` scores a tie
+as a non-win, which is why it prints `3/16 = 19%`.
+
+```
+seed 1000:  seat0 $23,881   seat1 $23,881   TIE
+seed 1003:  seat0 $48,745   seat1 $60,640   seat1
+```
+
+Reproduce with:
+
+```bash
+uv run bench.py --agent main:agent --opp main.py --swap -n 8 --workers 16
+```
 
 ### How it works
 
@@ -131,6 +157,20 @@ managing to feed 7–11 of 16 birds on a given day.
 `GOOSE_UPKEEP` double-charging crew capacity was tested as the alternative
 explanation and ruled out (−112, noise).
 
+### 🔎 Self-play measured for the first time — the score halves
+
+Run at the end of the session, before submitting. Against a copy of itself the
+agent scores **$43,841** against **$78,475** vs `pass` — a **44% drop**.
+
+Nothing is broken; the earlier numbers were simply measured against opponents
+that do not compete. Both farms now dump the same crops into the same shared
+inventory, so prices fall twice as fast, the scarcity premiums that drove much
+of the strategy get competed away, and melon's one-shot ~$26k prize is split
+rather than taken whole.
+
+The immediate suspect is `crop_profit`, which has no term for opponent supply —
+see pending item #1.
+
 ### 🔎 Engine facts established (verified against the source)
 
 - `BUILD_COOP` is **free** — the $300 is the bird. Requires a `None` tile.
@@ -157,6 +197,7 @@ All commands from the repo root. Timings measured on a 16-core machine.
 | `uv run bench.py --opp pass -n 48 --workers 16` | Score over 48 games | 29 s |
 | `uv run bench.py --opp random -n 16 --workers 16` | vs the built-in random agent | 9 s |
 | `uv run bench.py --opp baselines/v12.py -n 10 --swap` | Regression vs old agent, both seats | 12 s |
+| `uv run bench.py --agent main:agent --opp main.py --swap -n 8` | **Self-play** — the only contested-market number | 17 s |
 | `uv run trace.py --seed 2003 --opp pass` | One game, day by day | 5 s |
 | `uv run actions.py --seed 2003 --opp pass` | Where the crew's day goes, by op | 5 s |
 | `uv run tune.py MAX_UNITS 10 12 14` | Sweep one parameter, paired | 40 s |
@@ -208,16 +249,22 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 
 **Not started**
 
-1. **Cut the walking.** 51.7% of unit-actions are moves, another 11.5% are
+1. **Price the opponent's supply.** Self-play costs us 44% of the score, and
+   `crop_profit` is the likely reason: it prices a planting at
+   `today − town_drawdown + our_pipeline`, with **no term for what the opponent
+   will sell into the same market**. Every crop is therefore systematically
+   overvalued in a contested game, and the crops we most favour — the ones with
+   the fattest scarcity premiums — are exactly the ones a rival is most likely
+   to be growing too. A first cut could assume a symmetric opponent and double
+   the pipeline term, then measure. This is now the top item: it is the only one
+   measured against a *real* opponent, and it is worth ~$35k/game.
+2. **Cut the walking.** 51.7% of unit-actions are moves, another 11.5% are
    `PASS`. Assignment is greedy per-turn with no notion of a route, so units
    criss-cross the farm. Biggest remaining lever on the crop engine — and the
    precondition for the flock ever paying.
-2. **Land timing.** Quadrants 3 and 4 still land around day 11 because cash is
+3. **Land timing.** Quadrants 3 and 4 still land around day 11 because cash is
    tied up in melon seeds until the day-10 harvest. Reserving toward the next
    land price is probably worth several thousand.
-3. **Self-play validation.** Everything is measured against `random`, `pass`,
-   and v12, none of which really compete for the shared market. Run
-   `bench.py --agent main:agent --opp main.py --swap`.
 4. **The panic-dump rule is mispriced.** When
    `shed_fill + incoming > SHED_CAP - 10`, `reserve_frac` drops to 0.05 and the
    agent sells anything at almost any price. Flock traces showed it dumping
