@@ -1,19 +1,19 @@
 # Kaggriculture — start-here brief for the next session
 
-**Written:** 2026-08-12 · **Branch:** `KA-agent` · **HEAD:** (Phase 7 commit, see `git log`)
+**Written:** 2026-08-12 · **Branch:** `KA-agent` · **HEAD:** (Phase 8 commit, see `git log`)
 
-Open this in a fresh chat and say *"read NEXT_SESSION.md and start Phase 8."*
+Open this in a fresh chat and say *"read NEXT_SESSION.md and start Phase 9."*
 Everything needed to resume is here or linked from here.
 
 ---
 
 ## 0. The one question first: should I submit `main.py`?
 
-**Yes — this is the first behavioral change since the 506.1 submission.**
+**Yes — Phase 8 is a bigger measured gain than Phase 7 was.**
 
-Phase 7 shipped quadrant zoning (`QUAD_BONUS=2.0`, on by default), measured at
-+$4.5k mean margin and 78% winrate over 128 games against the pre-Phase-7
-build. This is not a no-op like the last session's fertilizer engine was.
+Phase 8 shipped cow and sheep (`MAX_ANIMALS=6`, on by default), measured at
++$8.4k mean margin and 68% winrate over 128 games against the pre-Phase-8
+build (which was already the submitted Phase 7 build).
 
 Pre-flight checks:
 
@@ -21,109 +21,106 @@ Pre-flight checks:
 |---|---|
 | `agent` is the last callable in the file | ✅ |
 | Signature is `agent(obs)` | ✅ |
-| Runs clean vs `pass` | ✅ $79,896 mean, 32/32 |
+| Runs clean vs `pass` | ✅ $86,937 mean, 32/32 |
 | Stdlib only, self-contained | ✅ |
-| `KAG_DEBUG=1` run — no hidden exceptions | ✅ |
+| `KAG_DEBUG=1` run with animals on — no hidden exceptions | ✅ |
+| All 3 species (GOOSE/COW/SHEEP) confirmed actually placed and producing | ✅ (tile-days seen: goose 2193, cow 450, sheep 731, one seed) |
 
-**Recommendation: submit now**, then keep working — submissions are scarce
-but this one has a measured gain behind it, unlike the last idle one.
+**Recommendation: submit now.**
 
 ---
 
 ## 1. State of the repo
 
-Working tree: Phase 7 changes are in `main.py`, `PROJECT_STATUS.md`. Check
+Working tree: Phase 8 changes are in `main.py`, `PROJECT_STATUS.md`. Check
 `git status` and `git log origin/KA-agent..HEAD` before assuming what's pushed.
 
-### Measured performance (current HEAD, `QUAD_BONUS=2.0`)
+### Measured performance (current HEAD, `QUAD_BONUS=2.0`, `MAX_ANIMALS=6`)
 
 | Matchup | Games | Ours | Opponent |
 |---|---|---|---|
-| vs `pass` | 64 | $79,896 | $3,000 |
-| vs `baselines/v12.py` | 64 (swap) | $70,914 | $2,703 |
-| vs pre-Phase-7 build (frozen HEAD) | 128 (swap) | $55,575 | $51,044 |
+| vs `pass` | 64 | $86,937 | $3,000 |
+| vs `baselines/v12.py` | 64 (swap) | $81,851 | $2,759 |
+| vs pre-Phase-8 build (frozen Phase-7 HEAD) | 128 (swap) | $65,519 | $57,112 |
 
-Previous session's numbers for the same matchups were $77,366 / $70,431 /
-(the pre-`OPP_SUPPLY` build test, not directly comparable) — Phase 7 improved
-or held flat everywhere it was checked, no regression found.
+Phase 7's numbers for the same matchups were $79,896 / $70,914 / (its own
+frozen-HEAD test, $55,575 vs $51,044) — Phase 8 improved everywhere it was
+checked, no regression found.
 
-**Quote the self-play/frozen-HEAD number, not the `pass` number**, per the
-same logic as last session: `pass` doesn't compete for the market.
+**Quote the frozen-HEAD number, not the `pass` number** — same logic as
+every prior session: `pass` doesn't compete for the market.
 
 ---
 
-## 2. What Phase 7 did — cut the walking
+## 2. What Phase 8 did — cow and sheep
 
-`actions.py` had shown 48.3% MOVE + 19.4% PASS. Two levers were tried.
+The `main.py:80` comment ("only GOOSE is worth the tiles") judged animals on
+lifetime market cap (EGG never saturates, MILK/WOOL do around $6-8k). But
+action cost is the binding constraint (Phase 7's own finding), and on
+$-per-action cow ($50) and sheep ($49) roughly double the goose's $26 — they
+harvest every 2-3 days instead of daily. This was deliberately deferred from
+an earlier session specifically until after Phase 7 changed the action-cost
+structure the comparison depends on.
 
-### ❌ Tried and parked: exact-job hysteresis (`STICKY`, default 0.0)
+### Engine facts confirmed before writing any code
 
-A score bonus for continuing toward the *exact* job a unit was walking to
-last turn (optionally gated to only the last 2 steps — "almost there").
-Replicated on 3 independent seed sets: a consistent **loss**, roughly −$7k to
-−$12k at `STICKY=1.0`. Action-count profiling showed almost no change in
-MOVE/PASS share, so the loss wasn't from extra walking — pinning a unit to a
-job with decaying relative value cost more in missed better options than it
-saved in avoided switching.
+Read `kaggriculture.py` rather than guessing:
 
-Left in the code, verified as an exact no-op at the default. Don't re-try the
-same mechanism without a new idea for why it would work this time.
+- `ANIMALS = {GOOSE: cost 300/COOP/interval 1, COW: cost 400/PASTURE/interval
+  2, SHEEP: cost 500/PASTURE/interval 3}` — exact params taken from the
+  engine source, not re-derived.
+- The `FEED` action handler takes 1 `WHEAT` **unconditionally**, regardless
+  of animal type — confirms `feed: "WHEAT"` is correct for all three.
+  `COOP` only ever holds `GOOSE`; `PASTURE` holds either `COW` or `SHEEP`.
+- The generic per-animal job-generation loop (`FEED`/`CARE`/`HARVEST`/
+  `COLLECT_FERTILIZER`) and `animal_output()` were **already fully generic**
+  over species before this change — they just never got exercised because
+  `ANIMALS` only ever listed `GOOSE`. Only the species-*selection* logic
+  (which species to value, buy, and build structures for) needed to grow.
 
-### ✅ Shipped: quadrant zoning (`QUAD_BONUS`, default 2.0)
+### The refactor (~160 lines, main.py)
 
-Each unit gets a "home" quadrant — `unlocked[idx % len(unlocked)]`, a pure
-function of unit index and the unlocked-quadrant list. No memory required,
-so it can't go stale across the fact that **hands are wiped and rehired every
-single morning** (this is why the hysteresis approach above needed careful
-index-staleness handling and this one sidesteps it entirely).
+- `ANIMALS` gained `COW`/`SHEEP`.
+- `goose_value()` → `animal_value(species, placed_day)`.
+- `new_value = {species: animal_value(sp, day) - cost}`, ranked into
+  `species_order` (best value first) so the shared crew-time/cash budget
+  goes to the best species first — this is what lets cow/sheep's higher
+  $-per-action win the budget over goose *without* a hand-coded species
+  preference. It falls out of the existing value-ranking pattern the file
+  already used everywhere else (crop ranking, job auction).
+- `target_flock`/`build_need` computed once, per-species, greedily against
+  a shared `crew * ANIMALS_PER_UNIT` slot budget and shared cash — `PASTURE`
+  structures are a shared pool between COW and SHEEP, decremented as each
+  species (in value order) claims some.
+- `PLACE`/`BUILD_COOP`/`BUILD_PASTURE`/`PICKUP`/`BUY_ANIMAL` jobs all loop
+  over species now. `BUILD_COOP` and `BUILD_PASTURE` on the same empty tile
+  share the tile's default `(x, y)` job key so they're mutually exclusive in
+  the auction, same trick used for the two `PLACE` options on one `PASTURE`
+  tile.
+- **Fixed a latent bug along the way**: the escape-penalty term inside the
+  generic FEED loop called the goose-only `goose_value()` regardless of
+  which species was actually about to escape. Harmless while only `GOOSE`
+  existed (same species every time); would have mispriced cow/sheep escapes
+  had this not been caught before shipping.
 
-Jobs in a unit's home quadrant get a `1 + QUAD_BONUS` score multiplier in the
-`value / (distance + 1)` ranking, so the crew spreads out instead of
-converging on whichever single job scores highest globally. Swept 0.1 → 5.0;
-plateaus from ~2.0 (81–86% winrate in every seed set tried past that point).
+### Measurement — swept `MAX_ANIMALS` 4→24, replicated on 4 independent seed sets
 
-Mechanism, confirmed via `actions.py` before/after: PASS dropped 21.6% →
-16.2%, and every productive action (WATER, PLANT, HARVEST, DIG) rose. It
-converts idle turns into work — it does not reduce total MOVE count (MOVE
-share actually rose slightly, 47.3% → 50.6%), it just makes the walking that
-does happen pay off more often instead of ending in a stolen job and a PASS.
+All against a frozen Phase-7 opponent, `--swap`:
 
-### Also checked: the "locked-spawn bug" from last session's brief
+| Seed set | `MAX_ANIMALS` | n | Mean | Opp mean | Winrate |
+|---|---|---|---|---|---|
+| seed0=5000 | 8 | 64 | $65,967 | $60,948 | 61% |
+| seed0=6000 | 6 | 64 | $68,065 | $60,530 | 75% |
+| seed0=2000 | 6 | 64 | $66,932 | $55,666 | 88% |
+| seed0=1000 (final) | 6 | 128 | $65,519 | $57,112 | 68% |
 
-**Not a bug.** Read `kaggriculture.py`: movement onto `LOCKED` tiles is
-explicitly allowed, and shed operations (`DROP`/`PICKUP`) resolve *before*
-the `LOCKED` guard specifically so a hand spawned on a locked shed-access tile
-isn't stranded. Nothing to design around here — cross this off permanently.
+Falls off past 12, flat by 24. Shipped `MAX_ANIMALS=6`.
 
 ---
 
 ## 3. Remaining work, in the order I'd do it
 
-### 🔜 Phase 8 — Re-derive cow and sheep  ← **START HERE**
-
-The analysis was already done two sessions ago. **The comment at
-`main.py:80` — *"Only GOOSE is worth the tiles"* — judges on the wrong
-metric** (lifetime market cap, not action cost):
-
-| | cost | productions | units | $ per action |
-|---|---|---|---|---|
-| Goose | $300 | 25 | 50 | **$26** |
-| Cow | $400 | 11 | 22 | **$50** |
-| Sheep | $500 | 8 | 16 | **$49** |
-
-Cow and sheep produce on 2–3 day intervals instead of daily — roughly 2× the
-goose's action-efficiency. Ceiling is ~$10.5k combined across ~8 tiles.
-
-**This was deliberately deferred to after Phase 7** because Phase 7 changes
-the action-cost structure the whole comparison rests on — re-measure with
-`QUAD_BONUS=2.0` in place, not against the old numbers above.
-
-Build cost is real: `ANIMALS` only knows `GOOSE`. Needs a `PASTURE`
-structure, `BUILD_PASTURE`, and generalising the goose-specific valuation
-(`goose_value`, `new_goose_value`, `free_coops`, `shed_geese`) — roughly a
-150-line refactor.
-
-### Phase 9 — Fix the panic-dump rule *(live bug, not an enhancement)*
+### 🔜 Phase 9 — Fix the panic-dump rule  ← **START HERE** *(live bug, not an enhancement)*
 
 When `shed_fill + incoming > SHED_CAP - 10`, `reserve_frac` drops to `0.05`
 and the agent sells **anything at almost any price**. Traces showed melon
@@ -131,19 +128,30 @@ dumped at **$4** against a $250 base.
 
 Overflow really is discarded, so the rule is right in principle — but it
 should dump the **cheapest** items, not everything. This can fire *without*
-geese whenever crop throughput is high, so it is probably costing money right
-now. Small, self-contained, worth doing even if the phases slip.
+animals whenever crop throughput is high, and now that the flock is on by
+default (Phase 8), animal products add to shed pressure too, so this may be
+costing more than it was. Small, self-contained — find the reserve_frac
+logic near the market-orders section of `main.py` and start there.
 
 ### Phase 10 — Land timing
 
 Quadrants 3 and 4 land around **day 11** because cash is tied up in melon
 seeds until the day-10 harvest. Reserving toward the next land price is
-probably worth several thousand.
+probably worth several thousand. Now competes with the flock for the same
+`spare_cash`/`land_reserve` budget (see `main.py`'s flock-valuation
+section) — worth checking whether the flock is now crowding out land
+purchases before tuning this in isolation.
 
 ### Housekeeping
 
 - `debug_wrapper.py` is redundant with `actions.py` / `trace.py`. Delete
   whenever.
+- `PROJECT_STATUS.html` and `CODE_GUIDE.pdf`/`.html` are stale as of Phase 7
+  and Phase 8. Re-render if anyone's going to read the formatted versions:
+  ```bash
+  google-chrome --headless --no-pdf-header-footer \
+    --print-to-pdf=CODE_GUIDE.pdf CODE_GUIDE.html
+  ```
 
 ---
 
@@ -161,13 +169,33 @@ git show <commit>:main.py > /tmp/prev.py
 # Sweep one parameter (against `pass` by default — see trap #3, prefer
 # TUNE_OPP=/path/to/frozen/prev.py for anything you actually intend to ship)
 .venv/bin/python tune.py MOVE_COST 3,5,7,9,11 -n 32
-TUNE_OPP=/tmp/prev.py .venv/bin/python tune.py QUAD_BONUS 1.0 2.0 3.0
+TUNE_OPP=/tmp/prev.py .venv/bin/python tune.py MAX_ANIMALS 4 6 8 12
 
 # Where the time goes
 .venv/bin/python actions.py
 
 # Day-by-day trace of one game
 .venv/bin/python trace.py
+
+# Confirm which animal species actually get placed and produce (ad hoc,
+# used to verify the Phase 8 refactor before trusting the bench numbers):
+.venv/bin/python -c "
+from kaggle_environments import make
+import main
+from collections import Counter
+species_seen = Counter()
+def traced(obs):
+    result = main.agent(obs)
+    me = obs['farms'][obs['player']]
+    for row in me['tiles']:
+        for t in row:
+            if isinstance(t, dict) and 'animal' in t:
+                species_seen[t['animal']] += 1
+    return result
+env = make('kaggriculture', configuration={'seed': 1000})
+env.run([traced, 'pass'])
+print(dict(species_seen))
+"
 ```
 
 **Every constant is an env var.** `_tune("NAME", default)` reads `KAG_NAME`.
@@ -179,11 +207,11 @@ Engine source of truth — read it rather than guessing at semantics:
 .venv/lib/python3.13/site-packages/kaggle_environments/envs/kaggriculture/kaggriculture.py
 ```
 
-Submitting:
+Submitting (kaggle CLI is installed in the project venv as of Phase 7 —
+`.venv/bin/kaggle`, credentials at `~/.kaggle/access_token`):
 ```bash
-kaggle competitions submit kaggriculture -f main.py -m "message"
-kaggle competitions episodes <SUBMISSION_ID> -v
-kaggle competitions replay <EPISODE_ID>
+.venv/bin/kaggle competitions submit kaggriculture -f main.py -m "message"
+.venv/bin/kaggle competitions submissions kaggriculture
 ```
 
 ---
@@ -208,7 +236,8 @@ Read these before running an experiment. Each one cost real time.
 4. **Value harvests at marginal revenue, not sticker price.** The first
    fertilizer cut lost **$22k** by pricing extra units at `price_of(crop)`.
    Going through `batch_revenue(crop, start_inventory(crop, 3), n)` recovered
-   $13.5k of it. Prices move as you sell — always price the batch.
+   $13.5k of it. Prices move as you sell — always price the batch. Phase 8's
+   `animal_value()` follows the same pattern for eggs/milk/wool.
 
 5. **Buy per *carrier*, not per opportunity.** Fertilizer bought one sack per
    profitable tile; capping at `1 + len(hands)` was worth $2.6k.
@@ -216,8 +245,9 @@ Read these before running an experiment. Each one cost real time.
 6. **Guess less, profile more.** A guess that fertilizer's loss was action
    cost was wrong (`actions.py` showed it was 2.5% of unit-actions). A guess
    that `STICKY`'s loss *was* about action cost was also wrong — profiling
-   showed near-identical MOVE/PASS share with and without it; the loss was in
-   which specific jobs got picked, not how much walking happened.
+   showed near-identical MOVE/PASS share with and without it. Phase 8 avoided
+   a similar guess by reading the engine's `FEED` handler directly rather
+   than assuming animal-specific feed items.
 
 7. **Nothing callable may be defined below `agent`** in `main.py`. Kaggle's
    loader runs the *last* callable in the file.
@@ -233,6 +263,24 @@ Read these before running an experiment. Each one cost real time.
    one (used for `QUAD_BONUS`) sidesteps the problem entirely. Prefer
    stateless when the data needed is cheap to recompute every turn.
 
+10. **When generalizing single-case code to multiple cases, check each
+    piece is actually still single-case before assuming it needs work.**
+    Phase 8 found the per-animal `FEED`/`HARVEST`/`CARE` job loop was
+    *already* generic (looked up `ANIMALS[animal]` throughout) — it only
+    looked goose-specific because `ANIMALS` had one entry. Don't refactor
+    code that's already correct; grep for the actual literal (`"GOOSE"`)
+    rather than assuming every function touching animals needs a rewrite.
+
+11. **A shared resource pool needs a single accounting pass, not repeated
+    independent checks.** `PASTURE` is shared between COW and SHEEP; the
+    flock-sizing pass decrements a shared `pool` dict as each species (best
+    value first) claims free structures, so the second species sees what's
+    left, not the original count. The `BUY_ANIMAL` order block deliberately
+    does *not* do this same decrementing (comment explains why: the
+    resulting slight overbuy just waits an extra turn in the shed, same
+    tolerance the original single-species design already had) — don't
+    "fix" that inconsistency without checking whether it's intentional.
+
 ---
 
 ## 6. Where the deeper docs are
@@ -240,9 +288,9 @@ Read these before running an experiment. Each one cost real time.
 | File | What's in it |
 |---|---|
 | `PROJECT_STATUS.md` | **Source of truth.** Full experiment log, every result. |
-| `PROJECT_STATUS.html` | Same, formatted and self-contained — **stale as of Phase 7, re-render if needed.** |
+| `PROJECT_STATUS.html` | Same, formatted and self-contained — **stale as of Phase 7/8, re-render if needed.** |
 | `kaggriculture_handoff.md` | Deep technical handoff — engine facts, design rationale. |
-| `CODE_GUIDE.pdf` / `.html` | Every `.py` file explained, 13 pages — **stale as of Phase 7.** |
+| `CODE_GUIDE.pdf` / `.html` | Every `.py` file explained, 13 pages — **stale as of Phase 7/8.** |
 | `README.md` | The full rulebook — crop/animal tables, price functions, buildings. |
 | `AGENTS.md` | Kaggle submission and replay mechanics. |
 
@@ -250,7 +298,7 @@ Read these before running an experiment. Each one cost real time.
 
 ## 7. Suggested opening message for the new chat
 
-> Read `NEXT_SESSION.md`. Start Phase 8 — re-derive cow and sheep against
-> the Phase 7 action-cost structure (`QUAD_BONUS=2.0`), not the old numbers.
-> Measure with a paired swap benchmark against the current HEAD before
-> keeping any change.
+> Read `NEXT_SESSION.md`. Start Phase 9 — fix the panic-dump rule so it
+> dumps the cheapest shed items instead of everything when
+> `reserve_frac` collapses. Measure with a paired swap benchmark against
+> the current HEAD before keeping any change.

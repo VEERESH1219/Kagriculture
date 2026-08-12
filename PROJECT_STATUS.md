@@ -236,6 +236,41 @@ engine source (`kaggriculture.py`) — movement onto `LOCKED` tiles is
 explicitly allowed and `DROP`/shed operations resolve before the `LOCKED`
 guard, precisely so a hand spawned there isn't stranded. Nothing to fix.
 
+### ✅ Phase 8: cow and sheep — shipped, +$8.4k / 68% winrate (2026-08-12)
+
+Re-derived the goose-only flock decision deliberately deferred from an
+earlier session, now that Phase 7 changed the action-cost structure it
+depends on. The `main.py:80` comment ("only GOOSE is worth the tiles")
+judged animals on lifetime market cap; on $-per-action, cow and sheep win —
+they harvest every 2-3 days instead of daily for roughly 2x the goose's
+$26/action.
+
+Generalized the goose-specific machinery to all three species (`ANIMALS`
+gained `COW`/`SHEEP` with engine-verified params; `goose_value` →
+`animal_value(species, placed_day)`; PLACE/BUILD/PICKUP/BUY_ANIMAL jobs all
+loop over species now, ranked best-value-first so cow/sheep naturally win
+the shared crew-time/cash budget over goose without a hand-coded
+preference). Confirmed the FEED/HARVEST/CARE job-generation loop and
+`animal_output()` were already fully generic before this change — only the
+species-selection and structure-building logic needed to grow. Along the
+way, fixed a latent bug: the escape-penalty term in the generic per-animal
+FEED loop called the goose-only `goose_value()` regardless of which species
+was actually about to escape (harmless while only GOOSE existed; would have
+mispriced cow/sheep escapes).
+
+Swept `MAX_ANIMALS` 4 → 24 against a frozen Phase-7 opponent; replicated on
+4 independent 64-game seed sets:
+
+| Seed set | `MAX_ANIMALS` | Mean | Opp mean | Winrate |
+|---|---|---|---|---|
+| seed0=5000 | 8 | $65,967 | $60,948 | 39/64 = 61% |
+| seed0=6000 | 6 | $68,065 | $60,530 | 48/64 = 75% |
+| seed0=2000 | 6 | $66,932 | $55,666 | 56/64 = 88% |
+| seed0=1000 (final, n=128) | 6 | $65,519 | $57,112 | 87/128 = 68% |
+
+Falls off past 12, flat by 24. Shipped `MAX_ANIMALS=6`. No regression
+elsewhere: vs `pass` $79,896 → $86,937; vs `v12` $70,914 → $81,851.
+
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
@@ -341,7 +376,7 @@ exit code 0 mean the file is healthy. Use `trace.py` to actually watch it play.
 Prefix any constant in `main.py` with `KAG_`:
 
 ```bash
-KAG_MAX_GEESE=8 uv run bench.py --opp pass -n 16 --workers 16   # ~$63k, i.e. worse
+KAG_MAX_ANIMALS=8 uv run bench.py --opp pass -n 16 --workers 16
 KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs off
 ```
 
@@ -353,7 +388,8 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 | `SEED_RATION` | 6 | 4→$62k, **6→$77k**, 10→$74k, 20→$68k |
 | `LAND_BUFFER` | 800 | 200→$50k (starves seeds); ≥400 all equal |
 | `PORTER_FILL` | 0.6 | shed fill that starts mid-day drops; +$2,202 vs off |
-| `MAX_GEESE` | 0 | flock off; 4→−$10k, 8→−$17k, 16→−$25k |
+| `QUAD_BONUS` | 2.0 | Phase 7; plateaus 2.0-5.0, 81-86% winrate vs frozen HEAD |
+| `MAX_ANIMALS` | 6 | Phase 8, goose+cow+sheep; 4→+$9k, **6-8→+$5-11k**, 24→flat. Pre-Phase-7 goose-only: 4→−$10k, 8→−$17k, 16→−$25k |
 
 ---
 
@@ -372,25 +408,16 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
    everything. This is a latent defect that can fire without geese whenever crop
    throughput is high — a real bug rather than an enhancement.
 
-**Built but parked**
-
-4. **Goose engine** — complete behind `MAX_GEESE=0`.
-5. **Animals beyond the goose.** `ANIMALS` only knows `GOOSE`; there is no cow
-   or sheep path at all. The justification (`main.py:80` — milk caps at ~$6k
-   lifetime revenue, wool ~$8k) was derived **assuming we own the whole
-   market**. Live replays show opponents buying cows on day 1. In a contested
-   game a capped $6k nobody competes for may well beat an uncapped wheat plan
-   that three agents are collapsing at once. Worth re-deriving, not assuming.
-
 **Housekeeping**
 
-6. `debug_wrapper.py` is redundant with `actions.py`/`trace.py`; drop it whenever.
-7. **The submitted agent is the pre-`OPP_SUPPLY` build.** `main.py` was
-   submitted on 2026-08-11 and scored **636.2** (rank 2197); five hours later it
-   had drifted to **607.9** (rank 2340). The whole board fell over that window,
-   so this is not all us — and the rating band was 509–716, so the move is
-   inside the noise. But it is not a climb. The `OPP_SUPPLY=1.0` build has not
-   been submitted yet.
+3. `debug_wrapper.py` is redundant with `actions.py`/`trace.py`; drop it whenever.
+
+Superseded/stale: an earlier version of this item tracked submission-lag
+between the working build and the leaderboard. As of the Phase 8 commit,
+`main.py` has been submitted current with HEAD (submission `55453124`,
+2026-08-12). See §2 for current bench numbers; leaderboard score needs a
+day+ to converge before it's worth quoting (skill rating, not dollars — see
+`NEXT_SESSION.md` trap list).
 
 ---
 

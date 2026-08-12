@@ -77,12 +77,21 @@ LAND_PRICES = [1000, 2000, 4000]
 LAND_MIN_DAYS = [5, 6, 8]
 SHED_TILES = [(4, 4), (5, 4), (4, 5), (5, 5)]
 
-# Only GOOSE is worth the tiles. MILK is linear-capped at ~$6k of lifetime
-# revenue and WOOL at ~$8k, both on slower intervals; EGG is log-priced and
-# never really saturates.
+# Phase 8 re-derivation (2026-08-12): the original note here ("only GOOSE is
+# worth the tiles") judged animals on lifetime market cap -- EGG never
+# saturates, MILK/WOOL do around $6-8k. But action cost is the binding
+# constraint, not tile count (actions.py: MOVE+PASS is most of the crew's
+# day), and on $-per-action COW and SHEEP win: they harvest every 2-3 days
+# instead of daily for roughly double the goose's $26/action at ~$49-50.
+# All three eat WHEAT, per the engine's FEED handler (it doesn't check
+# animal type). COOP holds only GOOSE; PASTURE holds either COW or SHEEP.
 ANIMALS = {
     "GOOSE": {"cost": 300, "structure": "COOP", "first_yield_day": 4,
               "interval": 1, "max_held": 4, "product": "EGG", "feed": "WHEAT"},
+    "COW":   {"cost": 400, "structure": "PASTURE", "first_yield_day": 8,
+              "interval": 2, "max_held": 6, "product": "MILK", "feed": "WHEAT"},
+    "SHEEP": {"cost": 500, "structure": "PASTURE", "first_yield_day": 6,
+              "interval": 3, "max_held": 6, "product": "WOOL", "feed": "WHEAT"},
 }
 # `_end_of_day` runs on `(step + 1) % turns_per_day == 0`, and the season stops
 # mid-day 29, so the last end-of-day -- the last time an animal produces -- is
@@ -147,15 +156,18 @@ QUAD_BONUS = _tune("QUAD_BONUS", 2.0)
 OPP_SUPPLY = _tune("OPP_SUPPLY", 1.0)
 HIRE_FLOOR = _tune("HIRE_FLOOR", 20)         # hands drive everything: never skip
 CASH_FLOOR = _tune("CASH_FLOOR", 150)
-# Flock OFF by default. The husbandry below works -- birds get built, bought,
-# placed, fed, cared for and harvested -- but measured over 16 seeds it loses
-# money at every size tried: 0 -> $79.5k, 4 -> $69.3k, 8 -> $62.9k, 16 -> $54.0k.
-# A bird grosses ~$150/day but needs ~7 unit-actions to collect it, and half the
-# crew's day already goes on walking; the crop work it displaces is worth more.
-# Raise this only alongside a fix for that (see the handoff).
-MAX_GEESE = _tune("MAX_GEESE", 0)            # hard ceiling on the flock
-GEESE_PER_UNIT = _tune("GEESE_PER_UNIT", 2.0)   # a goose costs ~3.5 actions/day
-GOOSE_UPKEEP = _tune("GOOSE_UPKEEP", 3.0)    # tile-equivalents of crew time per goose
+# Phase 8 (2026-08-12): re-measured with cow/sheep added and quadrant zoning
+# (QUAD_BONUS) in place. The original goose-only flock lost money at every
+# size tried, on the pre-Phase-7 action-cost structure -- a bird grossed
+# ~$150/day for ~7 unit-actions, against a crew already spending half its
+# day walking. With cow/sheep (harvest every 2-3 days instead of daily) and
+# cheaper effective movement, the flock is a net win: MAX_ANIMALS=6 measured
+# +$5k to +$11k mean margin and 61-88% winrate across 4 independent 64-game
+# seed sets against a frozen pre-flock opponent (128-game confirmation:
+# +$8.4k, 68%). Swept 4/8/12/16/24; 6-8 is the sweet spot, falls off past 12.
+MAX_ANIMALS = _tune("MAX_ANIMALS", 6)          # hard ceiling on the flock, all species combined
+ANIMALS_PER_UNIT = _tune("ANIMALS_PER_UNIT", 2.0)  # flock-slots per crew member
+ANIMAL_UPKEEP = _tune("ANIMAL_UPKEEP", 3.0)    # tile-equivalents of crew time per animal
 
 # Fertilizer OFF by default -- built, measured, and it does not pay. FERTILIZE
 # doubles what a watering adds, for `day`..`day+2`, and draws one FERTILIZER
@@ -518,40 +530,74 @@ def _decide(obs):
         return minv.get(item, MARKET_I0) - drawdown + pipeline.get(item, 0) * supply_scale
 
     # ── Flock valuation ────────────────────────────────────────────────────
-    # A goose is priced exactly like a planting: the revenue its remaining
-    # output clears against the inventory that output will face, less the bird
-    # and the wheat it eats. `pipeline` already carries the existing flock's
-    # production, so each extra goose is automatically valued at the margin.
+    # An animal is priced exactly like a planting: the revenue its remaining
+    # output clears against the inventory that output will face, less the
+    # animal and the wheat it eats. `pipeline` already carries the existing
+    # flock's production, so each extra animal is automatically valued at
+    # the margin. Generic over species -- COOP holds GOOSE, PASTURE holds
+    # COW or SHEEP, and all three eat WHEAT.
     crew = max(1, len(hands) + 1)
-    goose_cost = ANIMALS["GOOSE"]["cost"]
 
-    def goose_value(placed_day):
-        yields, colls = animal_output("GOOSE", placed_day, day)
-        eggs = yields * EGGS_PER_YIELD
-        if eggs <= 0 and colls <= 0:
+    def animal_value(species, placed_day):
+        a = ANIMALS[species]
+        yields, colls = animal_output(species, placed_day, day)
+        units = yields * EGGS_PER_YIELD
+        if units <= 0 and colls <= 0:
             return -1.0
-        rev = batch_revenue("EGG", start_inventory("EGG", max(1, yields)), eggs)
+        rev = batch_revenue(a["product"], start_inventory(a["product"], max(1, yields)), units)
         rev += batch_revenue("FERTILIZER", start_inventory("FERTILIZER", max(1, colls)), colls)
         # Feed is wheat we could otherwise have sold, one per day it is alive.
         return rev - colls * price_of("WHEAT")
 
-    # Value of starting a *new* bird today, net of buying it.
-    new_goose_value = goose_value(day) - goose_cost
+    # Value of starting each species new today, net of buying it. Ranked so
+    # the shared crew-time and cash budget below goes to the best species
+    # first -- this is what lets cow/sheep's higher $-per-action naturally
+    # win the budget over goose without hand-coding a preference.
+    new_value = {sp: animal_value(sp, day) - ANIMALS[sp]["cost"] for sp in ANIMALS}
+    species_order = sorted((sp for sp in ANIMALS if new_value[sp] > 0),
+                            key=lambda sp: -new_value[sp])
     flock = len(animals)
+    flock_by_species = {}
+    for (_, _, _, sp) in animals:
+        flock_by_species[sp] = flock_by_species.get(sp, 0) + 1
+    free_by_kind = {"COOP": [], "PASTURE": []}
+    for (x, y, kind) in free_coops:
+        free_by_kind[kind].append((x, y))
 
-    # Land compounds harder than any bird: $1,000 buys a 25-tile quadrant worth
-    # roughly $10k of crop over the rest of a season, against $1,800 for a $300
-    # goose. So the flock only gets the cash the land programme does not want,
-    # which naturally holds the birds back until the farm is bought out.
+    # Land compounds harder than any animal: $1,000 buys a 25-tile quadrant
+    # worth roughly $10k of crop over the rest of a season, against $1,800
+    # for a $300 goose. So the flock only gets the cash the land programme
+    # does not want, which naturally holds it back until the farm is bought.
     n_extra_now = len(unlocked) - 1
     land_reserve = 0
     if n_extra_now < len(LAND_PRICES) and days_left >= LAND_MIN_DAYS[n_extra_now]:
         land_reserve = LAND_PRICES[n_extra_now] + LAND_BUFFER
     spare_cash = max(0, money - CASH_FLOOR - land_reserve)
 
-    target_flock = min(MAX_GEESE, int(crew * GEESE_PER_UNIT),
-                       flock + len(free_coops) + int(spare_cash // goose_cost))
-    want_more = new_goose_value > 0 and flock + len(free_coops) < target_flock
+    # Greedily hand each species (best value first) a share of the shared
+    # crew-time and cash budget, then work out how many of that allocation
+    # still need a new structure built vs. can use one already standing.
+    # PASTURE is shared between COW and SHEEP, so structures claimed by an
+    # earlier (better-value) species come off the pool before the next one
+    # looks at it.
+    total_cap = min(MAX_ANIMALS, int(crew * ANIMALS_PER_UNIT))
+    remaining_slots = max(0, total_cap - flock)
+    remaining_cash = spare_cash
+    target_flock = dict(flock_by_species)
+    build_need = {"COOP": 0, "PASTURE": 0}
+    pool = {"COOP": len(free_by_kind["COOP"]), "PASTURE": len(free_by_kind["PASTURE"])}
+    for sp in species_order:
+        a = ANIMALS[sp]
+        room = min(remaining_slots, int(remaining_cash // a["cost"]))
+        if room <= 0:
+            continue
+        target_flock[sp] = flock_by_species.get(sp, 0) + room
+        remaining_slots -= room
+        remaining_cash -= room * a["cost"]
+        kind = a["structure"]
+        use_free = min(pool[kind], room)
+        pool[kind] -= use_free
+        build_need[kind] += room - use_free
 
     # ── Job list ───────────────────────────────────────────────────────────
     # Each job is priced in dollars. `need` restricts it to units already
@@ -658,7 +704,12 @@ def _decide(obs):
             add(tile_unlock_value * 0.8, x, y, ["DIG"])
 
     # ── Flock husbandry ────────────────────────────────────────────────────
-    egg_p = float(price_of("EGG"))
+    # Rough per-unit-wheat value reference for feed logistics, generalized
+    # from the goose-only `egg_p` to whichever product the actual flock (or,
+    # with nothing held yet, the best species we'd buy) currently produces.
+    flock_species = set(flock_by_species) or set(species_order)
+    flock_prod_p = max((float(price_of(ANIMALS[sp]["product"])) for sp in flock_species),
+                        default=0.0)
     fert_p = float(price_of("FERTILIZER"))
     wheat_p = float(price_of("WHEAT"))
     unfed = 0
@@ -695,7 +746,7 @@ def _decide(obs):
             if produces_tonight:
                 v += t.get("pending_care_bonus", 0) * prod_p
             if t.get("consecutive_unfed", 0) >= 1:
-                v += max(0.0, goose_value(placed))   # it escapes tonight otherwise
+                v += max(0.0, animal_value(animal, placed))   # it escapes tonight otherwise
             else:
                 v += (EGGS_PER_YIELD * prod_p + fert_p) * 0.5
             if v > 0:
@@ -707,24 +758,44 @@ def _decide(obs):
                 and day + 1 >= placed + a["first_yield_day"] - 1):
             add(prod_p, x, y, ["CARE"], key=(x, y, "CARE"))
 
-    # Placing a bird we already own realises its whole remaining season.
+    # Placing an animal we already own realises its whole remaining season.
+    # A COOP only ever takes a GOOSE; a PASTURE takes whichever of COW/SHEEP
+    # is worth more right now. Both PLACE options on one PASTURE tile share
+    # the tile's default key, so only one of them can actually be claimed.
     if not last_day:
         for (x, y, kind) in free_coops:
-            if kind == "COOP" and goose_value(day) > 0:
-                add(goose_value(day), x, y, ["PLACE", "GOOSE"], need=("GOOSE", 1))
+            if kind == "COOP":
+                v = animal_value("GOOSE", day)
+                if v > 0:
+                    add(v, x, y, ["PLACE", "GOOSE"], need=("GOOSE", 1))
+            else:
+                for sp in ("COW", "SHEEP"):
+                    v = animal_value(sp, day)
+                    if v > 0:
+                        add(v, x, y, ["PLACE", sp], need=(sp, 1))
 
     # Never take on more plants than the crew can keep watered -- an unwatered
     # plant is not just wasted seed, it becomes a weed that costs a DIG too.
-    # Birds draw on the same crew-time budget.
+    # Animals draw on the same crew-time budget.
     care_capacity = max(0, crew * PLANTS_PER_UNIT - len(plants)
-                        - int(len(animals) * GOOSE_UPKEEP))
+                        - int(len(animals) * ANIMAL_UPKEEP))
 
-    # A coop is free to build; what it costs is the tile and the $300 bird.
-    coop_budget = 0
-    if want_more:
-        coop_budget = max(0, target_flock - flock - len(free_coops))
+    # A structure is free to build; what it costs is the tile and the animal
+    # that will go in it. `build_need` was computed above per structure kind,
+    # already netted against free structures the flock-sizing pass claimed.
+    coop_budget = build_need["COOP"]
+    pasture_budget = build_need["PASTURE"]
+    if coop_budget > 0:
+        v = new_value.get("GOOSE", -1)
         for (x, y) in empties:
-            add(new_goose_value, x, y, ["BUILD_COOP"])
+            add(v, x, y, ["BUILD_COOP"])
+    if pasture_budget > 0:
+        v = max(new_value.get("COW", -1), new_value.get("SHEEP", -1))
+        for (x, y) in empties:
+            # Default key (x, y) -- same as BUILD_COOP's -- so the two
+            # options for one empty tile are mutually exclusive in the
+            # auction rather than both claimable by different units.
+            add(v, x, y, ["BUILD_PASTURE"])
 
     plant_budget = 0
     if not last_day and best_value > 0:
@@ -737,7 +808,6 @@ def _decide(obs):
     # ── Shed runs ──────────────────────────────────────────────────────────
     carried_wheat = sum(i.get("WHEAT", 0) for i in inventories)
     shed_wheat = shed.get("WHEAT", 0)
-    shed_geese = shed.get("GOOSE", 0)
     shed_fill = sum(v for v in shed.values() if v > 0)
     incoming = sum(sum(v for v in inv.values() if v > 0) for inv in inventories)
 
@@ -749,7 +819,7 @@ def _decide(obs):
             n = min(PICKUP_BATCH, shed_wheat - i * PICKUP_BATCH, short - i * PICKUP_BATCH)
             if n <= 0:
                 break
-            add(n * (EGGS_PER_YIELD * egg_p + fert_p) * 0.5, tx, ty,
+            add(n * (EGGS_PER_YIELD * flock_prod_p + fert_p) * 0.5, tx, ty,
                 ["PICKUP", "WHEAT", n])
 
     # Fetch fertilizer. Like FEED, FERTILIZE draws from the unit's own hands, so
@@ -764,11 +834,17 @@ def _decide(obs):
                 break
             add(n * fert_p_now * 0.5, tx, ty, ["PICKUP", "FERTILIZER", n])
 
-    # Fetch birds bought this season but still sitting in the shed.
-    placeable = min(shed_geese, len(free_coops))
-    if not last_day and placeable > 0 and goose_value(day) > 0:
-        for (tx, ty) in SHED_TILES[:placeable]:
-            add(goose_value(day), tx, ty, ["PICKUP", "GOOSE", 1])
+    # Fetch animals bought this season but still sitting in the shed. Keyed
+    # per species so two species queued at the same shed tile don't collide
+    # (the default (x, y) key only distinguishes tiles, not item type).
+    if not last_day:
+        for sp in ANIMALS:
+            shed_n = shed.get(sp, 0)
+            placeable = min(shed_n, len(free_by_kind[ANIMALS[sp]["structure"]]))
+            v = animal_value(sp, day)
+            if placeable > 0 and v > 0:
+                for (tx, ty) in SHED_TILES[:placeable]:
+                    add(v, tx, ty, ["PICKUP", sp, 1], key=(tx, ty, "PICKUP", sp))
 
     # Porter runs. Goods only reach the shed at end of day, and whatever does not
     # fit there is discarded silently -- so once the day's haul is outgrowing the
@@ -786,8 +862,9 @@ def _decide(obs):
                         and not (unfed > 0 and i == "WHEAT"))
             if worth <= 0:
                 continue
-            # Don't send a unit ferrying a bird back to the shed it came from.
-            if not last_day and inv.get("GOOSE", 0) > 0:
+            # Don't send a unit ferrying a live animal back to the shed it
+            # came from -- also not MARKET_PARAMS, so `worth` already skips it.
+            if not last_day and any(inv.get(sp, 0) > 0 for sp in ANIMALS):
                 continue
             x, y = (me["farmer"] if idx == 0 else hands[idx - 1])[:2]
             tx, ty = nearest_shed_tile(x, y)
@@ -860,6 +937,10 @@ def _decide(obs):
             if coop_budget <= 0:
                 continue
             coop_budget -= 1
+        elif op == "BUILD_PASTURE":
+            if pasture_budget <= 0:
+                continue
+            pasture_budget -= 1
         assigned[idx] = (job["x"], job["y"], job["a"])
         assigned_key[idx] = job["key"]
         free.discard(idx)
@@ -953,18 +1034,33 @@ def _decide(obs):
             cash -= cost
             hire_orders.append(["HIRE"])
 
-    # Birds. A bought goose lands in the shed and sits there taking a slot until
-    # a unit fetches it, so only buy against a coop that is already standing
-    # empty -- the one-turn lag is cheaper than a blocked shed.
-    carried_geese = sum(i.get("GOOSE", 0) for i in inventories)
+    # Animals. A bought animal lands in the shed and sits there taking a slot
+    # until a unit fetches it, so only buy against a structure that is
+    # already standing empty -- the one-turn lag is cheaper than a blocked
+    # shed. Species compete for the same shared `cash`, best value first, so
+    # it decrements sequentially across the loop just like seed buying does.
+    # PASTURE's free-tile count is shared between COW and SHEEP here (unlike
+    # the flock-sizing pass above, this doesn't decrement it between them),
+    # so the two can slightly overbuy against the same empty pasture -- the
+    # excess just waits an extra turn in the shed, same as the single-goose
+    # design already tolerated.
     animal_orders = []
-    if not last_day and new_goose_value > 0:
-        want = min(len(free_coops), target_flock - flock) - shed_geese - carried_geese
-        want = min(want, max(0, SHED_CAP - shed_fill - 5))
-        n = min(max(0, want), int(max(0, cash - CASH_FLOOR - land_reserve) // goose_cost))
-        if n > 0:
-            animal_orders.append(["BUY_ANIMAL", "GOOSE", n])
-            cash -= n * goose_cost
+    if not last_day:
+        for sp in species_order:
+            a = ANIMALS[sp]
+            kind = a["structure"]
+            have = flock_by_species.get(sp, 0)
+            want_total = target_flock.get(sp, have)
+            if want_total <= have:
+                continue
+            shed_n = shed.get(sp, 0)
+            carried = sum(i.get(sp, 0) for i in inventories)
+            want = min(len(free_by_kind[kind]), want_total - have) - shed_n - carried
+            want = min(want, max(0, SHED_CAP - shed_fill - 5))
+            n = min(max(0, want), int(max(0, cash - CASH_FLOOR - land_reserve) // a["cost"]))
+            if n > 0:
+                animal_orders.append(["BUY_ANIMAL", sp, n])
+                cash -= n * a["cost"]
 
     # Feed. Growing our own wheat is cheaper, but a starved bird escapes and
     # takes its whole remaining season with it, so top up rather than risk it.
@@ -974,7 +1070,7 @@ def _decide(obs):
         # BUY_PRODUCT quotes at the post-buy inventory, and each unit bought
         # lifts the next quote, so treat this as a floor on the true cost.
         unit_cost = market_price("WHEAT", minv.get("WHEAT", MARKET_I0) - 1)
-        if short > 0 and unit_cost < EGGS_PER_YIELD * egg_p:
+        if short > 0 and unit_cost < EGGS_PER_YIELD * flock_prod_p:
             n = min(short, max(0, SHED_CAP - shed_fill - 5),
                     int(max(0, cash - CASH_FLOOR) // max(1, 2 * unit_cost)))
             if n > 0:
