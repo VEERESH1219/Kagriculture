@@ -1,6 +1,6 @@
 # Kaggriculture — start-here brief for the next session
 
-**Written:** 2026-08-12 · **Branch:** `KA-agent` · **HEAD:** (Phase 8 commit, see `git log`)
+**Written:** 2026-08-12 · **Branch:** `KA-agent` · **HEAD:** (post-Phase-8 land/animal rework commit, see `git log`)
 
 Open this in a fresh chat and say *"read NEXT_SESSION.md and start Phase 9."*
 Everything needed to resume is here or linked from here.
@@ -9,11 +9,13 @@ Everything needed to resume is here or linked from here.
 
 ## 0. The one question first: should I submit `main.py`?
 
-**Yes — Phase 8 is a bigger measured gain than Phase 7 was.**
+**Yes — this is the biggest measured gain of any session so far.**
 
-Phase 8 shipped cow and sheep (`MAX_ANIMALS=6`, on by default), measured at
-+$8.4k mean margin and 68% winrate over 128 games against the pre-Phase-8
-build (which was already the submitted Phase 7 build).
+After Phase 8 shipped cow/sheep, a top-of-leaderboard replay analysis (see
+§3) led to a land-purchase fix (`MAX_LAND_BUYS=1`) and a re-tuned flock cap
+(`MAX_ANIMALS=10`, up from 6) that together measured **98% winrate and
++$13.3k mean margin** over 128 games against the prior (already-submitted)
+Phase 8 build.
 
 Pre-flight checks:
 
@@ -21,10 +23,9 @@ Pre-flight checks:
 |---|---|
 | `agent` is the last callable in the file | ✅ |
 | Signature is `agent(obs)` | ✅ |
-| Runs clean vs `pass` | ✅ $86,937 mean, 32/32 |
+| Runs clean vs `pass` | ✅ $92,084 mean, 32/32 |
 | Stdlib only, self-contained | ✅ |
 | `KAG_DEBUG=1` run with animals on — no hidden exceptions | ✅ |
-| All 3 species (GOOSE/COW/SHEEP) confirmed actually placed and producing | ✅ (tile-days seen: goose 2193, cow 450, sheep 731, one seed) |
 
 **Recommendation: submit now.**
 
@@ -32,20 +33,22 @@ Pre-flight checks:
 
 ## 1. State of the repo
 
-Working tree: Phase 8 changes are in `main.py`, `PROJECT_STATUS.md`. Check
+Working tree: current changes are in `main.py`, `PROJECT_STATUS.md`,
+`.gitignore` (added `replays/`, which holds a downloaded episode replay used
+for the leaderboard analysis below — not source, don't commit it). Check
 `git status` and `git log origin/KA-agent..HEAD` before assuming what's pushed.
 
-### Measured performance (current HEAD, `QUAD_BONUS=2.0`, `MAX_ANIMALS=6`)
+### Measured performance (current HEAD, `QUAD_BONUS=2.0`, `MAX_LAND_BUYS=1`, `MAX_ANIMALS=10`)
 
 | Matchup | Games | Ours | Opponent |
 |---|---|---|---|
-| vs `pass` | 64 | $86,937 | $3,000 |
-| vs `baselines/v12.py` | 64 (swap) | $81,851 | $2,759 |
-| vs pre-Phase-8 build (frozen Phase-7 HEAD) | 128 (swap) | $65,519 | $57,112 |
+| vs `pass` | 64 | $92,084 | $3,000 |
+| vs `baselines/v12.py` | 64 (swap) | $87,456 | $3,632 |
+| vs prior build (frozen Phase-8 HEAD) | 128 (swap) | $77,035 | $63,689 |
 
-Phase 7's numbers for the same matchups were $79,896 / $70,914 / (its own
-frozen-HEAD test, $55,575 vs $51,044) — Phase 8 improved everywhere it was
-checked, no regression found.
+Phase 8's numbers for the same matchups were $86,937 / $81,851 / (its own
+frozen-HEAD test, $65,519 vs $57,112) — this session improved everywhere it
+was checked, no regression found.
 
 **Quote the frozen-HEAD number, not the `pass` number** — same logic as
 every prior session: `pass` doesn't compete for the market.
@@ -114,11 +117,58 @@ All against a frozen Phase-7 opponent, `--swap`:
 | seed0=2000 | 6 | 64 | $66,932 | $55,666 | 88% |
 | seed0=1000 (final) | 6 | 128 | $65,519 | $57,112 | 68% |
 
-Falls off past 12, flat by 24. Shipped `MAX_ANIMALS=6`.
+Falls off past 12, flat by 24. Shipped `MAX_ANIMALS=6` at the time.
 
 ---
 
-## 3. Remaining work, in the order I'd do it
+## 3. What came next — a leaderboard replay found a bigger problem than the flock cap
+
+Downloaded a top-of-leaderboard replay (`kaggle competitions replay
+92267113`, saved to `replays/`, gitignored) between two ~$85k finishers.
+Both ran the same strategy: land and crew maxed out by day 12, then an
+almost-total pivot to animals. Final state: **12-13 animals, 100%
+COW/SHEEP, zero GOOSE, 0-1 crop tiles, 56-57 of ~75 unlocked tiles sitting
+completely empty.** Analysis method, if you want to do this again for a
+future replay: `kaggle competitions replay <episode_id>` downloads the same
+JSON `kaggle_environments` uses internally — index into `data['steps'][i][player]['observation']['farms'][player]` to read farm state at any point, same shape `bench.py`/`trace.py` already consume.
+
+Naively raising `MAX_ANIMALS` further (10→24) made things *worse*, the
+opposite of what the replay implied should be possible. Tracing our own
+agent's day-by-day cash and animal count exposed the real problem:
+`land_reserve` in `main.py` reserves the **entire** next quadrant's price +
+buffer, continuously, until it's bought — and with `LAND_MIN_DAYS =
+[5,6,8]`, that reserve is active almost the whole game, across all 3
+purchasable quadrants sequentially, choking `spare_cash` and delaying real
+animal investment until day 21+. Crew hit its cap by day 12, but the flock
+stayed at 0 animals until day 12 and didn't stabilize until day 24+.
+
+Added `MAX_LAND_BUYS` (of the 3 purchasable quadrants) and swept it
+alongside `MAX_ANIMALS`. Matching the replay's own stopping point
+(`MAX_LAND_BUYS=2`) already helped, but **`MAX_LAND_BUYS=1` (buy only NE,
+skip SW/SE) did much better** — our agent's cash reaches the flock faster
+once even one quadrant's reserve is removed, so it needs the extra land
+less than the replay's strategy did. `MAX_LAND_BUYS=0` is a clear loss (the
+first extra quadrant does matter). With land no longer starving the flock,
+`MAX_ANIMALS`'s true optimum moved from 6 to 10.
+
+**Lesson for next time a strategy idea comes from watching someone else
+play:** the replay was the right prompt to go looking, but copying its
+numbers directly (`MAX_LAND_BUYS=2`, their ~12-13 animal count) would have
+shipped a worse build than what our own agent's cash trajectory, once
+traced, actually supported. Use external play as a hypothesis generator,
+verify by tracing your own agent, not by matching their numbers.
+
+| Combination | Seed set | n | Mean | Opp mean | Winrate |
+|---|---|---|---|---|---|
+| `MAX_LAND_BUYS=1, MAX_ANIMALS=8` | seed0=2000 | 64 | $80,451 | $69,325 | 97% |
+| `MAX_LAND_BUYS=1, MAX_ANIMALS=10` | seed0=3000 | 64 | $78,585 | $65,237 | 100% |
+| `MAX_LAND_BUYS=1, MAX_ANIMALS=10` (final) | seed0=1000 | 128 | $77,035 | $63,689 | 98% |
+
+Shipped `MAX_LAND_BUYS=1`, `MAX_ANIMALS=10`.
+
+---
+
+## 4. Remaining work, in the order I'd do it
 
 ### 🔜 Phase 9 — Fix the panic-dump rule  ← **START HERE** *(live bug, not an enhancement)*
 
@@ -128,19 +178,21 @@ dumped at **$4** against a $250 base.
 
 Overflow really is discarded, so the rule is right in principle — but it
 should dump the **cheapest** items, not everything. This can fire *without*
-animals whenever crop throughput is high, and now that the flock is on by
-default (Phase 8), animal products add to shed pressure too, so this may be
-costing more than it was. Small, self-contained — find the reserve_frac
-logic near the market-orders section of `main.py` and start there.
+animals whenever crop throughput is high, and now that the flock is bigger
+(`MAX_ANIMALS=10`) and land tighter (`MAX_LAND_BUYS=1`, less shed-adjacent
+tile flexibility... actually unrelated, but shed pressure from a bigger
+flock is real), this may be costing more than it was. Small,
+self-contained — find the `reserve_frac` logic near the market-orders
+section of `main.py` and start there.
 
-### Phase 10 — Land timing
+### Phase 10 — Land timing: mostly answered, but check `LAND_MIN_DAYS`/`LAND_BUFFER` interaction
 
-Quadrants 3 and 4 land around **day 11** because cash is tied up in melon
-seeds until the day-10 harvest. Reserving toward the next land price is
-probably worth several thousand. Now competes with the flock for the same
-`spare_cash`/`land_reserve` budget (see `main.py`'s flock-valuation
-section) — worth checking whether the flock is now crowding out land
-purchases before tuning this in isolation.
+`MAX_LAND_BUYS=1` (§3) answers the *how many* question. The *when* question
+— `LAND_MIN_DAYS = [5,6,8]` gating when the reserve activates, and whether
+`LAND_BUFFER=800` is still the right liquidity cushion now that the flock
+competes harder for the same cash — hasn't been re-swept since the
+`MAX_LAND_BUYS` change. Worth a quick check, likely smaller than the
+`MAX_LAND_BUYS` win.
 
 ### Housekeeping
 
@@ -155,7 +207,7 @@ purchases before tuning this in isolation.
 
 ---
 
-## 4. How to run things
+## 5. How to run things
 
 ```bash
 # Paired seeded benchmark. --swap cancels seat advantage. Ties are NOT wins.
@@ -216,7 +268,7 @@ Submitting (kaggle CLI is installed in the project venv as of Phase 7 —
 
 ---
 
-## 5. Traps this project has already fallen into
+## 6. Traps this project has already fallen into
 
 Read these before running an experiment. Each one cost real time.
 
@@ -281,9 +333,18 @@ Read these before running an experiment. Each one cost real time.
     tolerance the original single-species design already had) — don't
     "fix" that inconsistency without checking whether it's intentional.
 
+12. **External play is a hypothesis generator, not a target to copy.** A
+    top-leaderboard replay showed a winning strategy running ~12-13 animals
+    and buying 2 extra land quadrants. Copying those numbers directly would
+    have shipped a worse build — our agent's own cash trajectory, once
+    traced, supported a *different* land count (1, not 2) and a different
+    animal cap (10, not 12-13). The replay was right to prompt investigation
+    (it revealed `MAX_ANIMALS` alone wasn't the bottleneck), but the actual
+    fix came from profiling our own agent, same discipline as trap #6.
+
 ---
 
-## 6. Where the deeper docs are
+## 7. Where the deeper docs are
 
 | File | What's in it |
 |---|---|
@@ -296,7 +357,7 @@ Read these before running an experiment. Each one cost real time.
 
 ---
 
-## 7. Suggested opening message for the new chat
+## 8. Suggested opening message for the new chat
 
 > Read `NEXT_SESSION.md`. Start Phase 9 — fix the panic-dump rule so it
 > dumps the cheapest shed items instead of everything when

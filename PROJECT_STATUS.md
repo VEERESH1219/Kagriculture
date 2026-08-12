@@ -271,6 +271,50 @@ Swept `MAX_ANIMALS` 4 → 24 against a frozen Phase-7 opponent; replicated on
 Falls off past 12, flat by 24. Shipped `MAX_ANIMALS=6`. No regression
 elsewhere: vs `pass` $79,896 → $86,937; vs `v12` $70,914 → $81,851.
 
+### ✅ Leaderboard-replay analysis → `MAX_LAND_BUYS`, +$13.3k / 98% winrate (2026-08-12)
+
+Downloaded and analyzed a top-of-leaderboard replay (episode `92267113`,
+`kaggle competitions replay`) between two ~$85k finishers. Both ran
+essentially the same strategy: crew and land maxed out fast (all 3
+quadrants bought by day 12), then an almost total pivot to animals — final
+composition was **12-13 animals, 100% COW/SHEEP, zero GOOSE, 0-1 crop
+tiles, 56-57 of ~75 unlocked tiles sitting empty all game.**
+
+Tracing our own agent at a naively higher `MAX_ANIMALS` made things *worse*
+(sweep showed a steady decline past 8) — the opposite of what the replay
+suggested should be possible. Turned out `MAX_ANIMALS` wasn't the real
+constraint: `land_reserve` reserves the *entire* next quadrant's price +
+buffer, continuously, until it's bought — and with `LAND_MIN_DAYS =
+[5,6,8]`, that reserve is active almost the whole game across all 3
+purchasable quadrants, choking `spare_cash` and delaying any real animal
+investment until ~day 21+. A trace confirmed it: crew hit its cap by day
+12, but animal count stayed at 0 until day 12 and didn't stabilize until
+day 24+, with cash under $1k for most of the first 20 days.
+
+Added `MAX_LAND_BUYS` (of the 3 purchasable quadrants NE/SW/SE) and swept
+it against `MAX_ANIMALS` together. Land-only change (`MAX_LAND_BUYS=2`,
+matching the replay's stopping point) already helped; **`MAX_LAND_BUYS=1`
+(buy only NE, skip SW/SE) did much better** — our agent doesn't need the
+land as much as the replay's strategy did once cash reaches the flock
+faster. `MAX_LAND_BUYS=0` (skip all extra land) is a clear loss, so the
+first extra quadrant does matter. With land no longer starving the flock,
+`MAX_ANIMALS`'s true optimum moved from 6 up to 10.
+
+| Combination | Seed set | n | Mean | Opp mean | Winrate |
+|---|---|---|---|---|---|
+| `MAX_LAND_BUYS=1, MAX_ANIMALS=8` | seed0=2000 | 64 | $80,451 | $69,325 | 97% |
+| `MAX_LAND_BUYS=1, MAX_ANIMALS=10` | seed0=3000 | 64 | $78,585 | $65,237 | 100% |
+| `MAX_LAND_BUYS=1, MAX_ANIMALS=10` (final) | seed0=1000 | 128 | $77,035 | $63,689 | 98% |
+
+Shipped `MAX_LAND_BUYS=1`, `MAX_ANIMALS=10`. No regression elsewhere: vs
+`pass` $86,937 → $92,084; vs `v12` $81,851 → $87,456.
+
+Note: our shipped `MAX_LAND_BUYS=1` is *more* conservative on land than the
+replay's own `MAX_LAND_BUYS=2` pattern — copying the observed strategy
+directly would have been wrong. The replay was the right prompt to go
+looking, but the actual fix came from tracing our own agent's cash
+trajectory, not from mimicking the leaderboard number.
+
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
@@ -389,7 +433,8 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 | `LAND_BUFFER` | 800 | 200→$50k (starves seeds); ≥400 all equal |
 | `PORTER_FILL` | 0.6 | shed fill that starts mid-day drops; +$2,202 vs off |
 | `QUAD_BONUS` | 2.0 | Phase 7; plateaus 2.0-5.0, 81-86% winrate vs frozen HEAD |
-| `MAX_ANIMALS` | 6 | Phase 8, goose+cow+sheep; 4→+$9k, **6-8→+$5-11k**, 24→flat. Pre-Phase-7 goose-only: 4→−$10k, 8→−$17k, 16→−$25k |
+| `MAX_ANIMALS` | 10 | goose+cow+sheep; optimum moved from 6→10 once `MAX_LAND_BUYS` dropped land's cash drag. 98% winrate, +$13.3k vs prior build |
+| `MAX_LAND_BUYS` | 1 | Of 3 purchasable quadrants. 0→loss (need the 1st), 2→worse than 1 (reserve for the 2nd still starves the flock), 3→old default |
 
 ---
 

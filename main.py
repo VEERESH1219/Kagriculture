@@ -113,6 +113,19 @@ MAX_UNITS = _tune("MAX_UNITS", 12)           # farmer + hands; fib payroll bites
 TILES_PER_UNIT = _tune("TILES_PER_UNIT", 6.0)
 PLANTS_PER_UNIT = _tune("PLANTS_PER_UNIT", 11)  # tiles one unit can tend per day
 LAND_BUFFER = _tune("LAND_BUFFER", 800)      # stay this liquid after buying land
+# How many of the 3 purchasable quadrants (NE, SW, SE) to actually buy.
+# Prompted by top leaderboard replays (episode 92267113, two ~$85k finishes):
+# both winners stop at 2 extra quadrants (NW+NE+SW) and leave 56-57 of ~75
+# unlocked tiles empty all game -- an animal-dominant economy barely needs
+# the land, and land_reserve blocking spare_cash for a quadrant it will
+# barely use starves the flock of cash for the back half of the season.
+# Measured here, though, 1 beats 2: land_reserve is a *sequential, total*
+# hold (the whole next price + buffer, every turn, until bought), so even
+# the 2nd purchase's reserve window chokes early flock investment harder
+# than the tiles it eventually buys are worth. 3 (buy all of them) is the
+# old land-hungry default; replicated sweeps (98% winrate, +$13.3k mean
+# margin over 128 games vs a frozen prior build) put the optimum at 1.
+MAX_LAND_BUYS = _tune("MAX_LAND_BUYS", 1)
 RESERVE_FRAC = _tune("RESERVE_FRAC", 0.45)   # hold while price < this x base
 SEED_RATION = _tune("SEED_RATION", 6)        # per-turn cap on slow, pricey seeds
 # Assignment hysteresis: multiplies a (unit, job) pair's score when that unit
@@ -161,11 +174,14 @@ CASH_FLOOR = _tune("CASH_FLOOR", 150)
 # size tried, on the pre-Phase-7 action-cost structure -- a bird grossed
 # ~$150/day for ~7 unit-actions, against a crew already spending half its
 # day walking. With cow/sheep (harvest every 2-3 days instead of daily) and
-# cheaper effective movement, the flock is a net win: MAX_ANIMALS=6 measured
-# +$5k to +$11k mean margin and 61-88% winrate across 4 independent 64-game
-# seed sets against a frozen pre-flock opponent (128-game confirmation:
-# +$8.4k, 68%). Swept 4/8/12/16/24; 6-8 is the sweet spot, falls off past 12.
-MAX_ANIMALS = _tune("MAX_ANIMALS", 6)          # hard ceiling on the flock, all species combined
+# cheaper effective movement, the flock is a net win. Re-swept again once
+# MAX_LAND_BUYS dropped from 3 to 1 (see above) -- the two are coupled: with
+# land no longer starving the flock's cash, more animals pay off before
+# hitting the crew-time ceiling. 10 is the new optimum (was 6, when land was
+# still eating the whole budget): 88-100% winrate and +$11k to +$14k mean
+# margin across 3 independent 32-64 game seed sets against a frozen
+# pre-this-change build; 128-game final confirmation: 98% winrate, +$13.3k.
+MAX_ANIMALS = _tune("MAX_ANIMALS", 10)         # hard ceiling on the flock, all species combined
 ANIMALS_PER_UNIT = _tune("ANIMALS_PER_UNIT", 2.0)  # flock-slots per crew member
 ANIMAL_UPKEEP = _tune("ANIMAL_UPKEEP", 3.0)    # tile-equivalents of crew time per animal
 
@@ -570,7 +586,8 @@ def _decide(obs):
     # does not want, which naturally holds it back until the farm is bought.
     n_extra_now = len(unlocked) - 1
     land_reserve = 0
-    if n_extra_now < len(LAND_PRICES) and days_left >= LAND_MIN_DAYS[n_extra_now]:
+    if (n_extra_now < min(len(LAND_PRICES), MAX_LAND_BUYS)
+            and days_left >= LAND_MIN_DAYS[n_extra_now]):
         land_reserve = LAND_PRICES[n_extra_now] + LAND_BUFFER
     spare_cash = max(0, money - CASH_FLOOR - land_reserve)
 
@@ -1015,7 +1032,7 @@ def _decide(obs):
     land_orders = []
     projected_tiles = unlocked_tiles
     n_extra = len(unlocked) - 1
-    if n_extra < len(LAND_PRICES):
+    if n_extra < min(len(LAND_PRICES), MAX_LAND_BUYS):
         price = LAND_PRICES[n_extra]
         if days_left >= LAND_MIN_DAYS[n_extra] and cash >= price + LAND_BUFFER:
             land_orders.append(["BUY_LAND"])
