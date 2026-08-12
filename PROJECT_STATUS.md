@@ -189,6 +189,53 @@ rather than taken whole.
 The immediate suspect was `crop_profit`, which had no term for opponent supply.
 That is now fixed — see below.
 
+### ✅ Phase 7: quadrant zoning — shipped, +$4.5k / 78% winrate (2026-08-12)
+
+`actions.py` showed 48.3% MOVE + 19.4% PASS — two-thirds of the crew's day
+producing nothing. Assignment was greedy per-turn on `value / (distance + 1)`
+with no route-awareness, so units converged on whichever single job scored
+highest and criss-crossed the farm.
+
+**Tried first, and discarded:** exact-job hysteresis (`STICKY`) — a score
+bonus for continuing toward the exact job a unit was walking to last turn,
+both ungated and range-gated to "almost there" (last 2 steps). Replicated on
+3 independent seed sets: a consistent loss, roughly −$7k to −$12k at
+`STICKY=1.0`. Action-count profiling showed barely any change in MOVE/PASS
+share, so the loss wasn't from more walking — pinning a unit to a decaying-
+value target cost more in missed better options than it saved in switching.
+Left in the code, defaulted to `STICKY=0.0` (verified exact no-op), in case a
+smarter targeting rule is worth revisiting later.
+
+**What worked:** quadrant zoning (`QUAD_BONUS`). Each unit gets a "home"
+quadrant — a stateless function of its index and the unlocked-quadrant list,
+so it needs no memory and survives the daily hand respawn cleanly (hands are
+wiped and rehired every morning; a remembered-target scheme would go stale
+across that boundary). Jobs in a unit's home quadrant get a score multiplier,
+spreading the crew across the farm instead of letting them all chase the same
+hot job.
+
+Swept 0.1 → 5.0 against a frozen HEAD opponent, replicated on 3 independent
+seed sets (n=24 to 128, `--swap`). Plateaus from ~2.0:
+
+| Seed set | n | Mean | Opp mean | Winrate |
+|---|---|---|---|---|
+| seed0=4000 | 64 | $53,463 | $48,223 | 55/64 = 86% |
+| seed0=1000 (final confirmation) | 128 | $55,575 | $51,044 | 100/128 = 78% |
+
+Shipped as the new default, `QUAD_BONUS=2.0`, in the middle of the plateau
+rather than at an edge. Action profile confirms the mechanism: PASS dropped
+21.6% → 16.2%, and every productive action (WATER, PLANT, HARVEST, DIG) rose
+— it converts idle turns into work rather than adding more walking.
+
+No regression elsewhere: vs `pass` $77,366 → $79,896; vs `v12` $70,431 →
+$70,914.
+
+**Also checked and ruled out as a bug:** hired hands spawn at shed-access
+tiles, three of which are `LOCKED` until their quadrant is bought. Read the
+engine source (`kaggriculture.py`) — movement onto `LOCKED` tiles is
+explicitly allowed and `DROP`/shed operations resolve before the `LOCKED`
+guard, precisely so a hand spawned there isn't stranded. Nothing to fix.
+
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
@@ -314,14 +361,10 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 
 **Not started**
 
-1. **Cut the walking.** 51.7% of unit-actions are moves, another 11.5% are
-   `PASS`. Assignment is greedy per-turn with no notion of a route, so units
-   criss-cross the farm. Biggest remaining lever on the crop engine — and the
-   precondition for the flock ever paying.
-2. **Land timing.** Quadrants 3 and 4 still land around day 11 because cash is
+1. **Land timing.** Quadrants 3 and 4 still land around day 11 because cash is
    tied up in melon seeds until the day-10 harvest. Reserving toward the next
    land price is probably worth several thousand.
-3. **The panic-dump rule is mispriced.** When
+2. **The panic-dump rule is mispriced.** When
    `shed_fill + incoming > SHED_CAP - 10`, `reserve_frac` drops to 0.05 and the
    agent sells anything at almost any price. Flock traces showed it dumping
    melon at **$4** against a $250 base. Overflow really is discarded so the rule

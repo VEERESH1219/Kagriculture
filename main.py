@@ -106,6 +106,29 @@ PLANTS_PER_UNIT = _tune("PLANTS_PER_UNIT", 11)  # tiles one unit can tend per da
 LAND_BUFFER = _tune("LAND_BUFFER", 800)      # stay this liquid after buying land
 RESERVE_FRAC = _tune("RESERVE_FRAC", 0.45)   # hold while price < this x base
 SEED_RATION = _tune("SEED_RATION", 6)        # per-turn cap on slow, pricey seeds
+# Assignment hysteresis: multiplies a (unit, job) pair's score when that unit
+# was already walking to that exact job last turn AND is within STICKY_RANGE
+# steps of it. Tried and parked OFF: measured a replicated loss on three
+# independent 16-24 game seed sets against a frozen HEAD opponent, roughly
+# -$7k to -$12k at STICKY=1.0, both ungated and range-gated to 2 steps.
+# Action-count profiling (actions.py) showed almost no change in MOVE/PASS
+# share, so the loss isn't from more walking -- pinning a unit to a job with
+# decaying relative value evidently costs more in missed better options than
+# it saves in avoided switching. 0.0 keeps the original greedy-every-turn
+# behaviour exactly (multiplier 1x, no-op).
+STICKY = _tune("STICKY", 0.0)
+STICKY_RANGE = _tune("STICKY_RANGE", 2)      # steps-from-target within which STICKY applies
+# Quadrant zoning: each unit gets a "home" quadrant (a stateless function of its
+# index and the unlocked-quadrant list, so it needs no memory and survives the
+# daily hand respawn cleanly). Jobs in a unit's home quadrant get a score
+# multiplier, so the crew spreads out across the farm instead of converging on
+# whichever single job currently scores highest.
+#
+# Swept 0.1 -> 5.0 against a frozen HEAD opponent, replicated on 3 independent
+# seed sets (n=24 to 64, --swap). Plateaus from ~2.0: 81-86% winrate, +$5-6k
+# mean margin. 2.0 is the chosen default, in the middle of the plateau rather
+# than at an edge.
+QUAD_BONUS = _tune("QUAD_BONUS", 2.0)
 # We can see our own unsold pipeline but not the opponent's. This scales ours to
 # stand in for theirs when pricing what a harvest will clear against: 0 prices a
 # solo market (the behaviour before 2026-08-11), 1 assumes a symmetric opponent
@@ -317,11 +340,23 @@ def nearest_shed_tile(x, y):
     return min(SHED_TILES, key=lambda t: abs(t[0] - x) + abs(t[1] - y))
 
 
+def _quadrant_of(x, y, size):
+    half = size // 2
+    return ("N" if y < half else "S") + ("W" if x < half else "E")
+
+
 def step_toward(x, y, tx, ty):
     dx, dy = tx - x, ty - y
     if abs(dx) >= abs(dy):
         return "EAST" if dx > 0 else "WEST"
     return "SOUTH" if dy > 0 else "NORTH"
+
+
+# Per-unit "what job was I walking to last turn" memory, keyed by player so a
+# self-play match (same callable for both seats, same process) can't cross-talk.
+# Reset at the top of a new episode so a stale key from a previous game can't
+# award an undeserved bonus.
+_TARGETS = {}
 
 
 def _decide(obs):
@@ -330,6 +365,9 @@ def _decide(obs):
     private = obs.get("private", {}) or {}
     day = obs.get("day", 0)
     hour = obs.get("hour", 0)
+    if day == 0 and hour == 0:
+        _TARGETS[player] = {}
+    prev_targets = _TARGETS.setdefault(player, {})
     market = obs.get("market", {}) or {}
     minv = dict(market.get("inventory", {}))
     town = obs.get("town", {}) or {}
@@ -761,7 +799,12 @@ def _decide(obs):
     # ── Assignment: highest-value job takes the nearest idle unit ──────────
     positions = [tuple(me["farmer"][:2])] + [tuple(h[:2]) for h in hands]
     n_units = len(positions)
+    # Each unit's home quadrant is a pure function of its index and the
+    # unlocked-quadrant list -- no memory needed, so it can't go stale across
+    # the daily hand respawn the way a remembered job target would.
+    home_quadrant = [unlocked[idx % len(unlocked)] for idx in range(n_units)]
     assigned = [None] * n_units
+    assigned_key = [None] * n_units
     free = set(range(n_units))
 
     claimed = set()
@@ -773,6 +816,7 @@ def _decide(obs):
         if idx is None or idx not in free:
             continue
         assigned[idx] = (job["x"], job["y"], job["a"][:1])
+        assigned_key[idx] = job["key"]
         free.discard(idx)
         claimed.add(job["key"])
 
@@ -793,7 +837,12 @@ def _decide(obs):
             dist = abs(jx - px) + abs(jy - py)
             if value - dist * MOVE_COST <= 0:
                 continue
-            pairs.append((value / (dist + 1.0), idx, j))
+            score = value / (dist + 1.0)
+            if dist <= STICKY_RANGE and prev_targets.get(idx) == job["key"]:
+                score *= 1.0 + STICKY
+            if _quadrant_of(jx, jy, size) == home_quadrant[idx]:
+                score *= 1.0 + QUAD_BONUS
+            pairs.append((score, idx, j))
     pairs.sort(key=lambda p: -p[0])
 
     for _, idx, j in pairs:
@@ -812,10 +861,14 @@ def _decide(obs):
                 continue
             coop_budget -= 1
         assigned[idx] = (job["x"], job["y"], job["a"])
+        assigned_key[idx] = job["key"]
         free.discard(idx)
         claimed.add(job["key"])
         if not free:
             break
+
+    _TARGETS[player] = {idx: assigned_key[idx] for idx in range(n_units)
+                         if assigned_key[idx] is not None}
 
     seeds_left = dict(seeds)
     unit_actions = []
