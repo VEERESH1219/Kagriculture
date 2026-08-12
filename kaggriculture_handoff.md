@@ -10,6 +10,17 @@ over fixed seeds, not estimated.
 | vs `random` | 16 | **$81,166** | $80,938 | $72,201 | 16/16 |
 | vs `pass` (deterministic, used for tuning) | 48 | $78,475 | $79,689 | $48,171 | 48/48 |
 | vs old **v12** agent, both seats | 20 | **$74,635** | $73,885 | $55,793 | 20/20 |
+| **self-play**, both seats | 16 | **$43,841** | $44,334 | $23,881 | n/a — mirror |
+
+**The self-play row is the only contested-market number, and it is the one to
+trust.** Every other opponent barely sells, so we alone drain the town and take
+every scarcity premium. Against a real competitor the score falls **44%**. Do
+not quote $78k as an expected result.
+
+Its winrate is meaningless: the agent is deterministic, so against a copy of
+itself it mirrors exactly and ties on ~2/3 of seeds; `bench.py` counts a tie as
+a non-win and prints `3/16`. Verified per-seed — 1000, 1001, 1002 and 1004 are
+exact ties to the dollar; 1003 and 1005 diverge.
 
 Previous v12 baseline: **$4,464** mean vs `random`. Current agent is ~18x that.
 Runtime is 4.6 ms/turn against a 1000 ms `actTimeout`, so there is a lot of
@@ -154,23 +165,55 @@ Swept one at a time vs `pass`, 16 seeds. Current values in `main.py`:
 
 ## Next steps, highest expected value first
 
-1. **Self-play validation.** Everything so far is measured against `random`,
-   `pass`, and v12 — all of which barely touch the shared market. A real
-   opponent competing for the same scarcity premiums will change crop
-   valuations. Run `bench.py --agent main:agent --opp main.py --swap`.
-2. **Land timing.** Quadrants 3 and 4 are still bought around day 11 because
+1. **Land timing.** Quadrants 3 and 4 are still bought around day 11 because
    cash is tied up in melon seeds until the day-10 harvest. Reserving toward the
    next land price, or deferring melon, is probably worth several thousand.
-3. **Cut the walking.** `actions.py` says **51.7%** of all unit-actions are
+2. **Cut the walking.** `actions.py` says **51.7%** of all unit-actions are
    moves and another 11.5% are `PASS`. Assignment is greedy per turn and has no
    notion of a route, so units criss-cross the farm. Servicing tiles in a sweep,
    or biasing each unit toward a home region, is now the biggest lever on the
    crop engine itself — and it is the precondition for the flock ever paying.
-4. **The panic-dump rule may be mispriced.** When `shed_fill + incoming >
+3. **The panic-dump rule may be mispriced.** When `shed_fill + incoming >
    SHED_CAP - 10`, `reserve_frac` drops to 0.05 and the agent sells anything at
    almost any price. In flock traces this dumped melon at **$4** against a base
    of $250. Overflow really is discarded, so the rule is right in principle, but
    it should dump the *cheapest* items rather than everything.
+4. **Re-derive the animal question.** `ANIMALS` contains only `GOOSE` — there is
+   no cow or sheep path in the agent at all. The comment at `main.py:80` rules
+   them out because milk caps at ~$6k lifetime revenue and wool at ~$8k, but
+   that was computed **assuming the whole market is ours**. Live Kaggle replays
+   show opponents buying cows on day 1. A capped $6k that nobody contests can
+   beat an uncapped wheat plan that several agents are collapsing at once.
+
+## `OPP_SUPPLY`: pricing supply we cannot observe (2026-08-11)
+
+`crop_profit` and `start_inventory` price a harvest against
+`minv − town_drawdown + pipeline`, and `pipeline` holds **only our own** crop —
+the opponent's fields are not in the observation. Both sites now scale it by
+`1 + OPP_SUPPLY`. At `0.0` the agent is byte-identical in behaviour to the old
+one (verified to the dollar); the shipped default is **`1.0`**, i.e. assume a
+symmetric opponent.
+
+Swept 0 → 3 against a frozen copy of the `0.0` agent over **two independent
+64-game seed sets** (`--seed0 1000` and `5000`, `--swap` on both):
+
+| OPP_SUPPLY | run 1 | run 2 | combined WR |
+|---|---|---|---|
+| 0.0 (control) | $0 / 20% | $0 / 17% | 24/128 = 19% |
+| 0.25 | +$5,389 / 81% | −$439 / 56% | 88/128 = 69% |
+| 0.5 | −$1,801 / 39% | +$1,144 / 59% | 63/128 = 49% |
+| 0.75 | +$4,810 / 66% | +$7,085 / 75% | 90/128 = 70% |
+| **1.0** | **+$6,115 / 73%** | **+$8,912 / 81%** | **99/128 = 77%** |
+| 1.5 | +$4,318 / 77% | +$613 / 62% | 89/128 = 70% |
+| 2.0 | +$527 / 44% | +$158 / 48% | 59/128 = 46% |
+| 3.0 | −$21,044 / 0% | −$19,886 / 0% | 0/128 = 0% |
+
+Two things to carry forward. **Always replicate on fresh seeds** — `0.25` led
+run 1 at 81% and went negative on run 2; a single sweep would have shipped a
+no-op. And **`1.0` is a trade, not a free win**: it is flat vs `pass` (+$118)
+but costs **$4,761 against v12**, because assuming a symmetric opponent
+over-corrects against a weak supplier. It still wins 100% of v12 games, just by
+less. Right call against live agents, wrong call against a passive field.
 
 ## Phase 4 (goose / egg engine): built, measured, switched off
 

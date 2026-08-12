@@ -230,7 +230,6 @@
   <p class="standfirst">An agent that prices every possible action in dollars, then sends each farm hand to whichever job pays best for the steps it takes to get there.</p>
   <div class="meta">
     <span>branch KA-agent</span>
-    <span>commit 0a5f716</span>
     <span>30-day season · 720 turns</span>
   </div>
 </header>
@@ -263,6 +262,8 @@
   </div>
 
   <p class="prose"><strong>Nothing else gets uploaded.</strong> <code>bench.py</code>, <code>tune.py</code>, <code>trace.py</code>, <code>actions.py</code>, <code>baselines/</code> and the docs are local tooling.</p>
+
+  <p class="prose">For <strong>how the code actually works</strong> — every <code>.py</code> file explained and the turn logic step by step — see <code>CODE_GUIDE.pdf</code> (13 pages, source <code>CODE_GUIDE.html</code>). This page is status; that one is understanding.</p>
 </section>
 
 <section>
@@ -283,9 +284,53 @@
         <tr><td>vs <code>random</code></td><td class="num">16</td><td class="num big">$81,166</td><td class="num">$80,938</td><td class="num">$72,201</td><td class="num">16/16</td></tr>
         <tr><td>vs <code>pass</code> <span class="note">(deterministic — tune against this)</span></td><td class="num">48</td><td class="num big">$78,475</td><td class="num">$79,689</td><td class="num">$48,171</td><td class="num">48/48</td></tr>
         <tr><td>vs <strong>v12</strong>, both seats</td><td class="num">20</td><td class="num big">$74,635</td><td class="num">$73,885</td><td class="num">$55,793</td><td class="num">20/20</td></tr>
+        <tr><td><strong>self-play</strong>, both seats</td><td class="num">16</td><td class="num big">$43,841</td><td class="num">$44,334</td><td class="num">$23,881</td><td class="num">mirror</td></tr>
       </tbody>
     </table>
   </div>
+
+  <div class="warn" style="margin-top:1.25rem">
+    <span class="lbl">Quote the self-play number, not the $78k</span>
+    <p><strong>$78,475 is a benchmark, not a forecast.</strong> Against an opponent that genuinely competes for the shared market the score falls <strong>44%</strong>, to about $44k. Every other row is against an opponent that barely sells, so our agent alone drains the town’s demand and collects every scarcity premium. Do not report $78k as an expected leaderboard result.</p>
+    <p>The winrate is meaningless for self-play: the agent is deterministic, so against a copy of itself it plays a <strong>mirror match</strong> and finishes on identical dollars. About two-thirds of seeds tie exactly, and <code>bench.py</code> scores a tie as a non-win — which is why it prints <code>3/16 = 19%</code>.</p>
+<pre><code>uv run bench.py --agent main:agent --opp main.py --swap -n 8 --workers 16
+
+seed 1000:  seat0 $23,881   seat1 $23,881   TIE
+seed 1003:  seat0 $48,745   seat1 $60,640   seat1</code></pre>
+  </div>
+
+  <h3 style="margin-top:1.6rem"><code>OPP_SUPPLY=1.0</code> — the contested-market fix</h3>
+  <p>Every row above is measured with <code>OPP_SUPPLY=0</code>. <code>crop_profit</code> priced a harvest against <code>minv − town_drawdown + pipeline</code>, and <code>pipeline</code> holds <strong>only our own</strong> crop — the opponent’s fields are not in the observation. Both valuation sites now scale it by <code>1 + OPP_SUPPLY</code>, shipped at <strong>1.0</strong> (assume a symmetric opponent). <code>0.0</code> reproduces the old agent exactly, verified to the dollar.</p>
+
+  <p>Swept 0 → 3 against a frozen copy of the <code>0.0</code> agent over <strong>two independent 64-game seed sets</strong>, <code>--swap</code> on both:</p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>OPP_SUPPLY</th><th class="num">run 1</th><th class="num">run 2</th><th class="num">combined WR</th></tr></thead>
+      <tbody>
+        <tr><td>0.0 <span class="tag">control</span></td><td class="num">$0 / 20%</td><td class="num">$0 / 17%</td><td class="num">24/128 = 19%</td></tr>
+        <tr><td>0.25</td><td class="num">+$5,389 / 81%</td><td class="num">−$439 / 56%</td><td class="num">88/128 = 69%</td></tr>
+        <tr><td>0.5</td><td class="num">−$1,801 / 39%</td><td class="num">+$1,144 / 59%</td><td class="num">63/128 = 49%</td></tr>
+        <tr><td>0.75</td><td class="num">+$4,810 / 66%</td><td class="num">+$7,085 / 75%</td><td class="num">90/128 = 70%</td></tr>
+        <tr><td><strong>1.0</strong></td><td class="num big">+$6,115 / 73%</td><td class="num big">+$8,912 / 81%</td><td class="num big">99/128 = 77%</td></tr>
+        <tr><td>1.5</td><td class="num">+$4,318 / 77%</td><td class="num">+$613 / 62%</td><td class="num">89/128 = 70%</td></tr>
+        <tr><td>2.0</td><td class="num">+$527 / 44%</td><td class="num">+$158 / 48%</td><td class="num">59/128 = 46%</td></tr>
+        <tr><td>3.0</td><td class="num">−$21,044 / 0%</td><td class="num">−$19,886 / 0%</td><td class="num">0/128 = 0%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="warn" style="margin-top:1.25rem">
+    <span class="lbl">Replicate before you believe a sweep</span>
+    <p><code>0.25</code> led run 1 at <strong>81%</strong> and went <em>negative</em> on fresh seeds. Reading the winner off a single sweep would have shipped a no-op. <code>1.0</code> is the only value best in both runs — and it is the a-priori correct answer against a mirror, which suggests mechanism rather than curve fit.</p>
+    <p>Past 2.0 it falls off a cliff: at <code>3.0</code> every crop prices as doomed, the agent stops planting, and it loses 0/128 — with the <em>lowest</em> stdev in the table, because it fails uniformly rather than wildly.</p>
+  </div>
+
+  <div class="note" style="margin-top:1rem">
+    <span class="lbl">This is a trade, not a strict improvement</span>
+    <p>Flat vs <code>pass</code> (+$118), but it costs <strong>$4,761 against v12</strong>: assuming a symmetric opponent over-corrects against a weak supplier. It still wins 100% of v12 games, just by less. The right call against a board of live agents; the wrong one against a passive field.</p>
+  </div>
+
   <p class="prose note" style="white-space:normal">Runtime is 4.6 ms/turn against a 1000 ms <code>actTimeout</code> — there is a great deal of compute headroom left.</p>
 </section>
 
@@ -432,22 +477,22 @@ KAG_PORTER_FILL=10 uv run bench.py --opp pass -n 48   <span class="cmt"># porter
     <li>
       <span class="rank">04</span>
       <div>
-        <h4>Self-play validation</h4>
-        <p>Everything is measured against <code>random</code>, <code>pass</code> and v12, none of which really compete for the shared market. A real opponent chasing the same scarcity premiums would change crop valuations. Run <code>bench.py --agent main:agent --opp main.py --swap</code>.</p>
+        <h4>Re-derive the animal question</h4>
+        <p><code>ANIMALS</code> contains only <code>GOOSE</code> — there is no cow or sheep path at all. The comment at <code>main.py:80</code> rules them out because milk caps at ~$6k lifetime revenue and wool at ~$8k, but that was computed <strong>assuming the whole market is ours</strong>. Live replays show opponents buying cows on day 1. A capped $6k nobody contests can beat an uncapped wheat plan that several agents are collapsing at once.</p>
       </div>
     </li>
     <li>
       <span class="rank">05</span>
       <div>
         <h4>Housekeeping</h4>
-        <p>The commits are <strong>unpushed</strong> — <code>KA-agent</code> is 3 ahead of <code>origin</code>. <code>debug_wrapper.py</code> is redundant with <code>actions.py</code> and can be dropped whenever.</p>
+        <p><strong>The submitted agent is the pre-<code>OPP_SUPPLY</code> build.</strong> It scored <strong>636.2</strong> (rank 2197) on 2026-08-11 and drifted to <strong>607.9</strong> (rank 2340) five hours later — though the whole board fell over that window and the rating band was 509–716, so the move is inside the noise. The <code>OPP_SUPPLY=1.0</code> build has not been submitted. Separately, <code>debug_wrapper.py</code> is redundant with <code>actions.py</code> and can be dropped whenever.</p>
       </div>
     </li>
   </ol>
 </section>
 
 <footer>
-  Kaggriculture · branch KA-agent · commit 0a5f716 · all figures from bench.py over fixed seeds
+  Kaggriculture · branch KA-agent · all figures from bench.py over fixed seeds
 </footer>
 
 </div>
