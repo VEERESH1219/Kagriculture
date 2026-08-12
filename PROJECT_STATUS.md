@@ -315,6 +315,55 @@ directly would have been wrong. The replay was the right prompt to go
 looking, but the actual fix came from tracing our own agent's cash
 trajectory, not from mimicking the leaderboard number.
 
+### ✅ Top-10 replay sweep → `GOOSE_ENABLED=0`, +$4.5k / 77% winrate (2026-08-12)
+
+Pulled the actual leaderboard (`kaggle competitions leaderboard`) and
+downloaded 5 more completed episodes belonging to the then-#1 player
+(カワシギ, 3195.1), whose opponents in those games are themselves other
+top-10 players — so one player's episode history covers several
+strategies at once. Every game showed the same pattern: **3 quadrants
+(NW+NE+SW), never the 4th; cow+sheep only, zero goose; カワシギ's own flock
+was identically 10 COW + 4 SHEEP = 14 animals in all 4 games it appeared
+in** — not incidental, a fixed target.
+
+Tried matching their numbers directly: `MAX_LAND_BUYS=2/3` with
+`MAX_ANIMALS=12-14` against the shipped build. Result was a loss or an
+**exact tie** at several combinations — the tie is the tell: with the 2nd
+quadrant's reserve active, our agent's actual achieved flock size never
+reaches the cap regardless of what the cap is set to, so different
+`MAX_ANIMALS` values produce identical outcomes. Also tried loosening
+`land_reserve` itself (new tunable `LAND_RESERVE_FRAC`, 0.3–0.7) to let a
+bigger flock and more land coexist — still lost to the shipped build at
+every fraction tried. Copying the leaderboard's numbers doesn't transfer
+to this agent's specific cash-allocation mechanics, consistent with the
+lesson from the `MAX_LAND_BUYS` work above.
+
+Traced カワシギ's own day-by-day cash/animal trajectory for comparison
+against ours (same method as the `MAX_LAND_BUYS` analysis). Two real
+differences stood out, not just numbers: (1) their flock is **perfectly
+stable** at 14 from day 12 onward, zero fluctuation, while ours visibly
+drops (11→10→10→10→7 by day 27 in one trace) — better feed logistics on
+their end; tried a bigger `FEED_DAYS` safety margin, exact tie, not the
+bottleneck. (2) **They never buy a single goose**, in any of the 5 games
+checked, while our agent still opportunistically buys geese early (goose
+matures fastest — `first_yield_day=4` vs cow's 8, sheep's 6 — so it wins
+the early value-ranking before cow/sheep mature, even though it's the
+worse species overall per Phase 8's own $-per-action analysis).
+
+Tested removing goose from the buyable species pool entirely. This one
+transferred: replicated on 2 independent seed sets (32 and 64 games,
+`--swap`), 78% winrate both times, +$4.6k to +$4.8k mean margin; 128-game
+final confirmation: 77% winrate, +$4.5k. Shipped `GOOSE_ENABLED=0`
+(default; `ANIMALS["GOOSE"]` and all its machinery stay in place, just
+excluded from the species-ranking pool). No regression elsewhere: vs
+`pass` $92,084 → $93,042; vs `v12` $87,456 → $87,995.
+
+Net effect of this session's work so far: land and animal *counts* copied
+from the leaderboard didn't help, but the leaderboard's *behavioral*
+pattern (zero goose) did, once verified against our own agent rather than
+assumed. `MAX_LAND_BUYS`/`MAX_ANIMALS` remain at 1/10 — matching the
+leaderboard's raw numbers is still not the right target for this agent.
+
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
@@ -435,6 +484,7 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 | `QUAD_BONUS` | 2.0 | Phase 7; plateaus 2.0-5.0, 81-86% winrate vs frozen HEAD |
 | `MAX_ANIMALS` | 10 | goose+cow+sheep; optimum moved from 6→10 once `MAX_LAND_BUYS` dropped land's cash drag. 98% winrate, +$13.3k vs prior build |
 | `MAX_LAND_BUYS` | 1 | Of 3 purchasable quadrants. 0→loss (need the 1st), 2→worse than 1 (reserve for the 2nd still starves the flock), 3→old default |
+| `GOOSE_ENABLED` | 0 | Top-10 replays run zero goose; matching that measured 77% winrate, +$4.5k vs GOOSE-enabled |
 
 ---
 

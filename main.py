@@ -126,6 +126,15 @@ LAND_BUFFER = _tune("LAND_BUFFER", 800)      # stay this liquid after buying lan
 # old land-hungry default; replicated sweeps (98% winrate, +$13.3k mean
 # margin over 128 games vs a frozen prior build) put the optimum at 1.
 MAX_LAND_BUYS = _tune("MAX_LAND_BUYS", 1)
+# Fraction of the next land purchase's reserve to actually hold back from the
+# flock. Tried loosening this (0.3-0.5) specifically to see if it would let
+# MAX_LAND_BUYS go back up to 2-3 (matching top-leaderboard land use) without
+# re-starving the flock -- it didn't: still a loss vs the MAX_LAND_BUYS=1
+# build at every fraction tried. At MAX_LAND_BUYS=1 the reserve isn't even
+# the binding constraint (MAX_ANIMALS is), so this had no effect there
+# either -- exact ties both times. 1.0 = the original full-reserve
+# behaviour; left in for whoever revisits MAX_LAND_BUYS>=2 next.
+LAND_RESERVE_FRAC = _tune("LAND_RESERVE_FRAC", 1.0)
 RESERVE_FRAC = _tune("RESERVE_FRAC", 0.45)   # hold while price < this x base
 SEED_RATION = _tune("SEED_RATION", 6)        # per-turn cap on slow, pricey seeds
 # Assignment hysteresis: multiplies a (unit, job) pair's score when that unit
@@ -184,6 +193,15 @@ CASH_FLOOR = _tune("CASH_FLOOR", 150)
 MAX_ANIMALS = _tune("MAX_ANIMALS", 10)         # hard ceiling on the flock, all species combined
 ANIMALS_PER_UNIT = _tune("ANIMALS_PER_UNIT", 2.0)  # flock-slots per crew member
 ANIMAL_UPKEEP = _tune("ANIMAL_UPKEEP", 3.0)    # tile-equivalents of crew time per animal
+# Every top-leaderboard replay checked (episode 92349280 and 4 others via
+# player カワシギ, rank #1) runs zero geese, ever -- goose only wins the
+# early value-ranking because it matures fastest (first_yield_day=4 vs
+# cow's 8, sheep's 6), grabbing crew-time and cash a cow or sheep would
+# have used better once it matured. Confirmed by removing it: replicated on
+# 2 independent seed sets (78% winrate, +$4.6-4.8k mean margin vs the
+# GOOSE-enabled build). 1 keeps goose in the species pool; the measured
+# improvement is 0.
+GOOSE_ENABLED = _tune("GOOSE_ENABLED", 0)
 
 # Fertilizer OFF by default -- built, measured, and it does not pay. FERTILIZE
 # doubles what a watering adds, for `day`..`day+2`, and draws one FERTILIZER
@@ -570,7 +588,8 @@ def _decide(obs):
     # first -- this is what lets cow/sheep's higher $-per-action naturally
     # win the budget over goose without hand-coding a preference.
     new_value = {sp: animal_value(sp, day) - ANIMALS[sp]["cost"] for sp in ANIMALS}
-    species_order = sorted((sp for sp in ANIMALS if new_value[sp] > 0),
+    buyable_species = ANIMALS if GOOSE_ENABLED else (sp for sp in ANIMALS if sp != "GOOSE")
+    species_order = sorted((sp for sp in buyable_species if new_value[sp] > 0),
                             key=lambda sp: -new_value[sp])
     flock = len(animals)
     flock_by_species = {}
@@ -588,7 +607,7 @@ def _decide(obs):
     land_reserve = 0
     if (n_extra_now < min(len(LAND_PRICES), MAX_LAND_BUYS)
             and days_left >= LAND_MIN_DAYS[n_extra_now]):
-        land_reserve = LAND_PRICES[n_extra_now] + LAND_BUFFER
+        land_reserve = (LAND_PRICES[n_extra_now] + LAND_BUFFER) * LAND_RESERVE_FRAC
     spare_cash = max(0, money - CASH_FLOOR - land_reserve)
 
     # Greedily hand each species (best value first) a share of the shared
