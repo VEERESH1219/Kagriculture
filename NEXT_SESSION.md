@@ -1,9 +1,13 @@
 # Kaggriculture — start-here brief for the next session
 
-**Written:** 2026-08-12 · **Branch:** `KA-agent` · **HEAD:** (post-top-10-replay-sweep commit, see `git log`)
+**Written:** 2026-08-13 · **Branch:** `KA-agent` · **HEAD:** (post-Phase-10 commit, see `git log`)
 
-Open this in a fresh chat and say *"read NEXT_SESSION.md and start Phase 10."*
-Everything needed to resume is here or linked from here.
+Phases 7-10 are done (7-8 shipped, 9-10 investigated and found to be
+dead ends — see `PROJECT_STATUS.md`). There's no concretely scoped
+improvement idea left; the honest next step is either housekeeping
+(below) or a fresh round of leaderboard-replay analysis to find the next
+hypothesis. Open this in a fresh chat and say *"read NEXT_SESSION.md"* —
+don't assume there's a numbered phase waiting; ask what to look at next.
 
 ---
 
@@ -140,16 +144,18 @@ dead stock that permanently eats shed capacity — worse than the
 reliably. Full writeup in `PROJECT_STATUS.md` under "Phase 9". Don't
 re-attempt this exact fix without a new idea — see trap #13.
 
-### 🔜 Phase 10 — Land timing: `LAND_MIN_DAYS`/`LAND_BUFFER`, not yet re-swept  ← **START HERE**
+### ❌ Phase 10 — Land timing — investigated 2026-08-13, no room found
 
-`MAX_LAND_BUYS=1` (§2) answered *how many* quadrants to buy. The *when* —
-`LAND_MIN_DAYS=[5,6,8]` gating when the reserve activates, and whether
-`LAND_BUFFER=800` is still the right liquidity cushion now that
-`GOOSE_ENABLED=0` changes early-game cash flow too — hasn't been re-swept
-since either change. Likely smaller than the `MAX_LAND_BUYS` win, but
-cheap to check.
+Swept `LAND_MIN_DAYS0` (1–20) and `LAND_BUFFER` (0–2000) against the
+`GOOSE_ENABLED=0` build. Completely flat across the whole range except
+where `LAND_BUFFER` gets absurdly large and blocks the purchase outright.
+Traced why: `MAX_LAND_BUYS=1` means only one quadrant is ever bought, and
+starting cash ($3,000) already covers its price + buffer on day 0-1
+regardless of either threshold — nothing to tune here unless
+`MAX_LAND_BUYS` goes back up. Full writeup in `PROJECT_STATUS.md` under
+"Phase 10". Nothing submitted.
 
-### Housekeeping
+### Housekeeping  ← **START HERE** *(the only concretely scoped items left)*
 
 - `debug_wrapper.py` is redundant with `actions.py` / `trace.py`. Delete
   whenever.
@@ -305,7 +311,7 @@ Read these before running an experiment. Each one cost real time.
 
 ## 7. Suggested opening message for the new chat
 
-> Read `NEXT_SESSION.md`. Start Phase 10 — re-sweep `LAND_MIN_DAYS` and
-> `LAND_BUFFER` now that `MAX_LAND_BUYS=1` and `GOOSE_ENABLED=0` have
-> changed the cash dynamics they depend on. Measure with a paired swap
-> benchmark against the current HEAD before keeping any change.
+> Read `NEXT_SESSION.md`. Phases 7-10 are closed out and there's no
+> scoped improvement idea queued. Either do the housekeeping in §3, or
+> pull fresh leaderboard replays (§2 has the pattern) to find the next
+> hypothesis, tracing our own agent against it before trusting anything.

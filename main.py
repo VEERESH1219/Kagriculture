@@ -113,6 +113,10 @@ MAX_UNITS = _tune("MAX_UNITS", 12)           # farmer + hands; fib payroll bites
 TILES_PER_UNIT = _tune("TILES_PER_UNIT", 6.0)
 PLANTS_PER_UNIT = _tune("PLANTS_PER_UNIT", 11)  # tiles one unit can tend per day
 LAND_BUFFER = _tune("LAND_BUFFER", 800)      # stay this liquid after buying land
+# Only index 0 is live once MAX_LAND_BUYS=1 caps purchases at the first
+# extra quadrant -- indices 1-2 are dead weight now, kept for when/if
+# MAX_LAND_BUYS goes back up. Tunable so it can be re-swept on its own.
+LAND_MIN_DAYS[0] = _tune("LAND_MIN_DAYS0", LAND_MIN_DAYS[0])
 # How many of the 3 purchasable quadrants (NE, SW, SE) to actually buy.
 # Prompted by top leaderboard replays (episode 92267113, two ~$85k finishes):
 # both winners stop at 2 extra quadrants (NW+NE+SW) and leave 56-57 of ~75

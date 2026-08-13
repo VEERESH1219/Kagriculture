@@ -394,6 +394,26 @@ plausible-sounding fix from a single trace still has to clear a real
 benchmark, and this one didn't. Reverted; `main.py` is unchanged from the
 `GOOSE_ENABLED=0` build (submitted, now 718.3 on the leaderboard).
 
+### ❌ Phase 10: land timing (`LAND_MIN_DAYS`/`LAND_BUFFER`) — no room found (2026-08-13)
+
+Made `LAND_MIN_DAYS[0]` tunable (`KAG_LAND_MIN_DAYS0`; only index 0 is
+live now that `MAX_LAND_BUYS=1` caps purchases at the first extra
+quadrant) and swept it 1–20, plus `LAND_BUFFER` 0–2000, against the
+`GOOSE_ENABLED=0` build as the frozen opponent. Both were completely flat
+— identical mean to the dollar across the whole range, right up to
+`LAND_BUFFER=2000` where it finally started blocking the purchase
+outright (`-$6,162`).
+
+Traced why: with `MAX_LAND_BUYS=1`, starting cash ($3,000) already covers
+the first quadrant's price + buffer ($1,000 + $800) on day 0-1, so the
+purchase happens almost immediately regardless of what either threshold
+is set to — they only bind at extremes far outside anything worth
+shipping. There's no headroom here to tune; the single land purchase
+this agent ever makes is gated by starting cash, not by these two
+parameters. `main.py` behavior is unchanged (defaults untouched); kept
+the new `LAND_MIN_DAYS0` tunable since it's free infrastructure for if
+`MAX_LAND_BUYS` ever goes back up. Not submitted — nothing to submit.
+
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
