@@ -364,6 +364,36 @@ pattern (zero goose) did, once verified against our own agent rather than
 assumed. `MAX_LAND_BUYS`/`MAX_ANIMALS` remain at 1/10 — matching the
 leaderboard's raw numbers is still not the right target for this agent.
 
+### ❌ Phase 9: panic-dump reserve — investigated, no fix shipped (2026-08-13)
+
+`NEXT_SESSION.md` flagged a real observation: when
+`shed_fill + incoming > SHED_CAP - 10`, `reserve_frac` collapses to `0.05`
+for every item, and a trace had shown melon selling at $4 against a $250
+base. The hypothesis was that dumping the *same* expensive item every
+panic turn crashes its price over time, and that biasing the collapsed
+reserve toward the cheapest items instead should fix it.
+
+Built two variants: (1) force-sell exactly enough of the cheapest items to
+cover that turn's marginal overflow, protected items keep the normal
+reserve; (2) same idea with a bigger clearance target (`need = shed_fill`)
+so it doesn't undersell turn to turn. Both benchmarked as a **net loss**
+against the shipped build (17%/11% winrate over paired-swap sets), even
+under an artificially small `SHED_CAP` (25/40, vs the real 100) built
+specifically to force panic to fire often enough to measure.
+
+Traced a losing seed (1003, `SHED_CAP=25`) turn by turn: the "protect the
+expensive item" strategy holds MELON back correctly, but MELON's *normal*
+reserve is high enough that it then almost never clears at all outside of
+panic — it just sits in the shed as dead stock, permanently eating
+capacity and forcing WHEAT/FERTILIZER into panic far more often than the
+baseline ever needed. The baseline's blanket 0.05 reserve looks wasteful
+per-unit (that's the $4-melon trace), but it actually liquidates
+everything reliably, which beats protecting an item that then never sells
+at all. Confirmed goose-analysis-era lesson generalizes here too: a
+plausible-sounding fix from a single trace still has to clear a real
+benchmark, and this one didn't. Reverted; `main.py` is unchanged from the
+`GOOSE_ENABLED=0` build (submitted, now 718.3 on the leaderboard).
+
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The

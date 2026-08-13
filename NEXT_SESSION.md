@@ -2,7 +2,7 @@
 
 **Written:** 2026-08-12 · **Branch:** `KA-agent` · **HEAD:** (post-top-10-replay-sweep commit, see `git log`)
 
-Open this in a fresh chat and say *"read NEXT_SESSION.md and start Phase 9."*
+Open this in a fresh chat and say *"read NEXT_SESSION.md and start Phase 10."*
 Everything needed to resume is here or linked from here.
 
 ---
@@ -127,21 +127,20 @@ into a list and print after `env.run()` returns, not during.
 
 ## 3. Remaining work, in the order I'd do it
 
-### 🔜 Phase 9 — Fix the panic-dump rule  ← **START HERE** *(live bug, not an enhancement)*
+### ❌ Phase 9 — Panic-dump rule — investigated 2026-08-13, no fix shipped
 
-When `shed_fill + incoming > SHED_CAP - 10`, `reserve_frac` drops to `0.05`
-and the agent sells **anything at almost any price**. Traces showed melon
-dumped at **$4** against a $250 base.
+The observation was real (melon dumped at $4 against a $250 base when
+`reserve_frac` collapses to `0.05` under shed pressure), but "protect the
+expensive items, dump the cheap ones instead" benchmarked as a **net
+loss** (17%/11% winrate under an artificially small `SHED_CAP` built to
+force panic to fire often). Traced why: the protected expensive item then
+almost never clears under its *normal* reserve either, so it just becomes
+dead stock that permanently eats shed capacity — worse than the
+"wasteful" blanket fire-sale, which at least liquidates everything
+reliably. Full writeup in `PROJECT_STATUS.md` under "Phase 9". Don't
+re-attempt this exact fix without a new idea — see trap #13.
 
-Overflow really is discarded, so the rule is right in principle — but it
-should dump the **cheapest** items, not everything. This can fire *without*
-animals whenever crop throughput is high, and the flock is now bigger
-(`MAX_ANIMALS=10`) than when this was first flagged, so shed pressure from
-animal products may make it fire more often. Small, self-contained — find
-the `reserve_frac` logic near the market-orders section of `main.py` and
-start there.
-
-### Phase 10 — Land timing: `LAND_MIN_DAYS`/`LAND_BUFFER`, not yet re-swept
+### 🔜 Phase 10 — Land timing: `LAND_MIN_DAYS`/`LAND_BUFFER`, not yet re-swept  ← **START HERE**
 
 `MAX_LAND_BUYS=1` (§2) answered *how many* quadrants to buy. The *when* —
 `LAND_MIN_DAYS=[5,6,8]` gating when the reserve activates, and whether
@@ -280,6 +279,15 @@ Read these before running an experiment. Each one cost real time.
     settings. Go find that something, don't just try more values of the
     cap.
 
+13. **A benchmark under stress conditions beats a plausible mechanism.**
+    Phase 9's "dump cheap, protect expensive" fix for the panic-sell rule
+    sounded right from a single trace, but a paired benchmark (even one
+    rigged with a tiny `SHED_CAP` to force the rare condition to fire
+    often) showed it losing. The failure mode wasn't visible from the
+    trace that motivated the fix — it only showed up by comparing full
+    games. When a bug is real but rare, build a stress test before
+    shipping the fix, not just before diagnosing the bug.
+
 ---
 
 ## 6. Where the deeper docs are
@@ -297,7 +305,7 @@ Read these before running an experiment. Each one cost real time.
 
 ## 7. Suggested opening message for the new chat
 
-> Read `NEXT_SESSION.md`. Start Phase 9 — fix the panic-dump rule so it
-> dumps the cheapest shed items instead of everything when
-> `reserve_frac` collapses. Measure with a paired swap benchmark against
-> the current HEAD before keeping any change.
+> Read `NEXT_SESSION.md`. Start Phase 10 — re-sweep `LAND_MIN_DAYS` and
+> `LAND_BUFFER` now that `MAX_LAND_BUYS=1` and `GOOSE_ENABLED=0` have
+> changed the cash dynamics they depend on. Measure with a paired swap
+> benchmark against the current HEAD before keeping any change.
