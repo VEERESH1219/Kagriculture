@@ -414,6 +414,78 @@ parameters. `main.py` behavior is unchanged (defaults untouched); kept
 the new `LAND_MIN_DAYS0` tunable since it's free infrastructure for if
 `MAX_LAND_BUYS` ever goes back up. Not submitted — nothing to submit.
 
+### ⚠️ Phase 11: flock-gated `MAX_LAND_BUYS=2` — shipped, then reverted (2026-08-14)
+
+Revisited Phase 10's dead end with a different mechanism: instead of
+tuning the day-only land gate (no headroom, see above), added
+`FLOCK_GATE_FRAC` (`KAG_FLOCK_GATE_FRAC`, default 0.9) so the 2nd extra
+quadrant's cash reserve only activates once the flock is already at ≥90%
+of its cap — the 1st quadrant stays ungated. The idea: `land_reserve` is
+a sequential, total hold, so it only starves the flock if it competes
+with it; gating on the flock already being full means it never competes.
+
+Swept `MAX_LAND_BUYS=1` vs `2` (gate on) against a frozen opponent across
+5 independent 128-game seed sets (640 games): no reversals, ~73%
+winrate, ~+$4.3k mean margin aggregate. Shipped it (commit `8a5925b`).
+
+**It lost on the real Kaggle leaderboard.** The previous best submission
+(goose-removal build) scored 708.4; Phase 11 scored 600.0 fresh /
+settled to 680.7. Reverted (commit `18a8410`) back to `MAX_LAND_BUYS=1`;
+the reverted build later settled at 758.1 — confirming Phase 11 really
+was behind, not just unlucky timing (though see the caveat below on how
+noisy these settled numbers are).
+
+**Two things worth remembering from this:**
+1. **A frozen-single-opponent `bench.py` win does not reliably predict
+   the real leaderboard.** The real leaderboard scores against a shifting
+   field of live agents, not one frozen build — a change that beats
+   yesterday's version can still lose against the field. Treat `bench.py`
+   wins as necessary, not sufficient, before spending a submission.
+2. **Public leaderboard scores are not final at submission time** — they
+   drift as more episodes play out (Phase 11: 600.0 → 680.7; the revert:
+   708.4 → 758.1, a ~50-80 point swing on *byte-identical* code just from
+   submitting on a different day). Don't judge a submission from its
+   just-posted score, and don't over-read small score gaps between
+   submissions made hours apart.
+
+### ❌ Phase 12: crew-sizing hypothesis (idle cash, flat crew) — investigated, ruled out (2026-08-14)
+
+A fresh replay (`episode-92902587`, one of our own games, loss vs
+Mohammed Mukthar $76,356 vs $81,585) showed our crew flat at 8 hands the
+entire game despite cash climbing to $60k+ by day 27, while the opponent
+reached the real cap of 12 hands by day 9-12. Traced to `main.py:1066`:
+
+```python
+target_units = max(2, min(MAX_UNITS, int(projected_tiles / TILES_PER_UNIT) + 1))
+```
+
+Crew size is tile-gated, not cash-gated. With `MAX_LAND_BUYS=1`,
+`projected_tiles` stays ~50, capping `target_units` around 8-9 regardless
+of idle cash. Hypothesis: decouple hiring from tile count so idle crew
+capacity gets used for animal/porter work even with land capped at 1
+quadrant.
+
+Tested cheaply via the existing `TILES_PER_UNIT` tunable (lowering it
+raises `target_units` for the same land, without touching land itself) —
+swept against the `MAX_LAND_BUYS=1` frozen build:
+
+| `TILES_PER_UNIT` | mean | Δ vs baseline |
+|---|---|---|
+| baseline (6.0) | $74,266 | — |
+| 5.0 | $67,316 | **-$6,950** |
+| 4.0 / 3.0 / 2.0 | $66,269 | **-$7,997** (flat once crew hits `MAX_UNITS=12`) |
+
+Forcing extra hires without more land or animal-care work to give them is
+a clean loss — fib-scaled payroll for idle units outweighs anything they
+can do. Checked the animal angle too: `MAX_ANIMALS=10` against
+`ANIMALS_PER_UNIT=2.0` means our existing ~8-9 hands can already service
+the full flock cap (needs only ~5), so there's no animal-driven case for
+more crew either. The opponent's 12-hand crew wasn't idle-cash waste on
+its own — it was paired *with* the extra land that gave those hands
+something to do, which is the same land-purchase question Phase 11
+already tested and lost on the real leaderboard. Closed as a dead end,
+same pattern as Phase 9/10. `main.py` unchanged; not submitted.
+
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
@@ -540,22 +612,38 @@ KAG_PORTER_FILL=10.0 uv run bench.py --opp pass -n 48           # porter runs of
 
 ## 5. What's still pending
 
-**Not started**
+**Nothing concretely scoped.** Phases 9-12 closed out every lead that had
+been identified up to this point:
 
-1. **Land timing.** Quadrants 3 and 4 still land around day 11 because cash is
-   tied up in melon seeds until the day-10 harvest. Reserving toward the next
-   land price is probably worth several thousand.
-2. **The panic-dump rule is mispriced.** When
-   `shed_fill + incoming > SHED_CAP - 10`, `reserve_frac` drops to 0.05 and the
-   agent sells anything at almost any price. Flock traces showed it dumping
-   melon at **$4** against a $250 base. Overflow really is discarded so the rule
-   is right in principle, but it should dump the *cheapest* items, not
-   everything. This is a latent defect that can fire without geese whenever crop
-   throughput is high — a real bug rather than an enhancement.
+- Land timing (`LAND_MIN_DAYS`/`LAND_BUFFER`) — investigated in Phase 10,
+  no headroom found (starting cash already covers the first purchase
+  almost immediately, regardless of either threshold).
+- A flock-aware variant of land timing (`FLOCK_GATE_FRAC`,
+  `MAX_LAND_BUYS=2`) — shipped in Phase 11 on a strong local-bench result,
+  but lost on the real Kaggle leaderboard and was reverted. See Phase 11's
+  writeup above for two reusable lessons: a frozen-single-opponent
+  `bench.py` win doesn't reliably predict the real leaderboard, and
+  leaderboard scores drift for a while after submitting rather than being
+  final immediately.
+- The panic-dump reserve mispricing — investigated in Phase 9. The
+  "protect expensive items" fix looked right in principle but benchmarked
+  as a net loss; the blanket 0.05 reserve, despite looking wasteful
+  per-unit, actually liquidates reliably in a way the fix didn't. No
+  change shipped.
+- Crew sizing being tile-gated rather than cash-gated — investigated in
+  Phase 12 from a fresh replay. Forcing more hires without more land or
+  animal-care work for them to do is a clean loss (fib payroll on idle
+  units). No change shipped.
+
+The honest next step is a fresh round of leaderboard-replay analysis to
+find a new hypothesis (same method that found the original
+`MAX_LAND_BUYS` fix and the zero-goose pattern) — not a queue of known
+next moves to work through.
 
 **Housekeeping**
 
-3. `debug_wrapper.py` is redundant with `actions.py`/`trace.py`; drop it whenever.
+`debug_wrapper.py` was dropped this session — it was redundant with
+`actions.py`/`trace.py`.
 
 Superseded/stale: an earlier version of this item tracked submission-lag
 between the working build and the leaderboard. As of the Phase 8 commit,
@@ -581,4 +669,3 @@ day+ to converge before it's worth quoting (skill rating, not dollars — see
 | `PROJECT_STATUS.html` | Formatted, self-contained rendering of this document | — |
 | `CODE_GUIDE.pdf` | **Code walkthrough** — every `.py` file explained, 13 pages | — |
 | `CODE_GUIDE.html` | Source for the PDF; re-render with headless Chrome | — |
-| `debug_wrapper.py` | Old ad-hoc debug script, redundant | — |
