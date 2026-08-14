@@ -123,13 +123,20 @@ LAND_MIN_DAYS[0] = _tune("LAND_MIN_DAYS0", LAND_MIN_DAYS[0])
 # unlocked tiles empty all game -- an animal-dominant economy barely needs
 # the land, and land_reserve blocking spare_cash for a quadrant it will
 # barely use starves the flock of cash for the back half of the season.
-# Measured here, though, 1 beats 2: land_reserve is a *sequential, total*
+# Under a day-only gate, 1 beat 2: land_reserve is a *sequential, total*
 # hold (the whole next price + buffer, every turn, until bought), so even
-# the 2nd purchase's reserve window chokes early flock investment harder
-# than the tiles it eventually buys are worth. 3 (buy all of them) is the
-# old land-hungry default; replicated sweeps (98% winrate, +$13.3k mean
-# margin over 128 games vs a frozen prior build) put the optimum at 1.
-MAX_LAND_BUYS = _tune("MAX_LAND_BUYS", 1)
+# the 2nd purchase's reserve window choked early flock investment harder
+# than the tiles it eventually bought were worth. Gating the 2nd+ purchase
+# on the flock instead of the day (see FLOCK_GATE_FRAC) fixes that: land
+# only ever claims cash the flock isn't using, and 2 beat 1 across 5
+# independent 128-game seed sets vs a frozen prior build (no reversals;
+# ~73% winrate / +$4.3k mean margin aggregate -- see PROJECT_STATUS.md,
+# Phase 11, for the full per-seed-set breakdown and outlier note). 3 (buy
+# all of them) is the old land-hungry default, untested under this gate.
+MAX_LAND_BUYS = _tune("MAX_LAND_BUYS", 2)
+# Fraction of the flock cap the 2nd+ quadrant purchase waits for before its
+# cash reserve activates (1st quadrant is ungated -- see land_reserve).
+FLOCK_GATE_FRAC = _tune("FLOCK_GATE_FRAC", 0.9)
 # Fraction of the next land purchase's reserve to actually hold back from the
 # flock. Tried loosening this (0.3-0.5) specifically to see if it would let
 # MAX_LAND_BUYS go back up to 2-3 (matching top-leaderboard land use) without
@@ -609,8 +616,17 @@ def _decide(obs):
     # does not want, which naturally holds it back until the farm is bought.
     n_extra_now = len(unlocked) - 1
     land_reserve = 0
+    # The 1st extra quadrant (n_extra_now==0) is worth reserving for immediately --
+    # measured, 98% winrate. Beyond that, a day-only gate reserves cash for land
+    # the whole game even while the flock is still ramping, which chokes early
+    # animal investment (documented loss at MAX_LAND_BUYS=2 under the day-only
+    # gate). Gating the 2nd+ purchase on the flock already being near its cap
+    # means land only ever claims cash the flock isn't using, instead of
+    # competing with it during the ramp.
+    flock_gate_ok = (n_extra_now == 0
+                     or flock >= FLOCK_GATE_FRAC * min(MAX_ANIMALS, int(crew * ANIMALS_PER_UNIT)))
     if (n_extra_now < min(len(LAND_PRICES), MAX_LAND_BUYS)
-            and days_left >= LAND_MIN_DAYS[n_extra_now]):
+            and days_left >= LAND_MIN_DAYS[n_extra_now] and flock_gate_ok):
         land_reserve = (LAND_PRICES[n_extra_now] + LAND_BUFFER) * LAND_RESERVE_FRAC
     spare_cash = max(0, money - CASH_FLOOR - land_reserve)
 
@@ -1057,7 +1073,9 @@ def _decide(obs):
     n_extra = len(unlocked) - 1
     if n_extra < min(len(LAND_PRICES), MAX_LAND_BUYS):
         price = LAND_PRICES[n_extra]
-        if days_left >= LAND_MIN_DAYS[n_extra] and cash >= price + LAND_BUFFER:
+        gate_ok = (n_extra == 0
+                   or flock >= FLOCK_GATE_FRAC * min(MAX_ANIMALS, int(crew * ANIMALS_PER_UNIT)))
+        if days_left >= LAND_MIN_DAYS[n_extra] and cash >= price + LAND_BUFFER and gate_ok:
             land_orders.append(["BUY_LAND"])
             cash -= price
             projected_tiles += (size * size) // 4
