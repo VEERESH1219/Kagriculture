@@ -414,41 +414,6 @@ parameters. `main.py` behavior is unchanged (defaults untouched); kept
 the new `LAND_MIN_DAYS0` tunable since it's free infrastructure for if
 `MAX_LAND_BUYS` ever goes back up. Not submitted — nothing to submit.
 
-### ✅ Phase 11: flock-gated `MAX_LAND_BUYS=2` — shipped, ~73% winrate / +$4.3k avg (2026-08-14)
-
-Phase 10 found no headroom in `LAND_MIN_DAYS`/`LAND_BUFFER` because
-`land_reserve` is a *sequential, total* hold — the whole next quadrant's
-price + buffer, every turn, until bought — so any 2nd purchase's reserve
-window chokes early flock investment for the rest of the game, which is
-why `MAX_LAND_BUYS=1` beat 2 back in the original leaderboard-replay
-session. This session added `FLOCK_GATE_FRAC` (`KAG_FLOCK_GATE_FRAC`,
-default 0.9): the 1st extra quadrant stays ungated (unchanged, still
-worth reserving for immediately), but the 2nd+ purchase's reserve now
-only activates once the flock is already at ≥90% of its cap. That turns
-the reserve from "compete with the flock all game" into "only claim cash
-the flock isn't using anyway."
-
-Swept `MAX_LAND_BUYS=1` vs `2` (gate on) against a frozen pre-Phase-11
-opponent across **5 independent 128-game seed sets (640 games total)**:
-
-| seed0 | winrate | mean margin |
-|---|---|---|
-| 1000 | 91% | +$8.6k |
-| 5000 | 91% | +$9.1k |
-| 2000 | 61% | +$1.1k |
-| 8000 | 66% | +$1.6k |
-| 12000 | 58% | +$1.2k |
-
-Every seed set was positive — no reversals, unlike the classic
-false-positive pattern (trap #1) — but the effect size is uneven: two
-sets are strong outliers, the other three cluster around a smaller real
-edge. `seed0=1000` is the default used throughout this project's own
-docs/examples and may be slightly overrepresented in past tuning, so
-weight it a little less than the other four. **Aggregate: ~73% winrate,
-~+$4.3k mean margin.** Shipped `MAX_LAND_BUYS=2` as the new default
-(`FLOCK_GATE_FRAC` stays at 0.9, untested against alternatives — a
-follow-up sweep of that threshold is a reasonable next step).
-
 ### ✅ `OPP_SUPPLY` — pricing the supply we cannot see
 
 `crop_profit` priced a planting at `today − town_drawdown + our_pipeline`. The
