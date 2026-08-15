@@ -190,11 +190,27 @@ CASH_FLOOR = _tune("CASH_FLOOR", 150)
 # cheaper effective movement, the flock is a net win. Re-swept again once
 # MAX_LAND_BUYS dropped from 3 to 1 (see above) -- the two are coupled: with
 # land no longer starving the flock's cash, more animals pay off before
-# hitting the crew-time ceiling. 10 is the new optimum (was 6, when land was
-# still eating the whole budget): 88-100% winrate and +$11k to +$14k mean
-# margin across 3 independent 32-64 game seed sets against a frozen
-# pre-this-change build; 128-game final confirmation: 98% winrate, +$13.3k.
-MAX_ANIMALS = _tune("MAX_ANIMALS", 10)         # hard ceiling on the flock, all species combined
+# hitting the crew-time ceiling.
+#
+# 10 was measured as the optimum here, but that measurement was invalid: it
+# used `tune.py`, which leaks KAG_* into a .py opponent as well as into us,
+# so both sides moved together and the sweep was really a mirror match (see
+# PROJECT_STATUS.md, Phase 13). Re-swept 0-16 with `sweep.py` against a
+# frozen, env-immune opponent, 48 games per point, 3 independent seed sets.
+# The curve has a clear interior peak and 10 is far past it:
+#
+#   MAX_ANIMALS   0      1      2      3      4      5      6      8     10
+#   margin     -25.6k  -9.1k  +0.5k  +3.5k  +7.1k  +6.0k  +5.6k  +1.3k   --
+#   winrate       0%    15%    46%    65%    94%    71%    79%    65%    --
+#   (seed0=1000 column shown; 5000 and 12000 agree on the shape)
+#
+# 0 losing $25.6k over 48 games confirms the flock itself is essential -- the
+# error was only ever the ceiling, not the engine. 4 and 5 tie on mean margin
+# (+$6,225 vs +$6,347 over the 3 sets); 5 ships because it is the more robust
+# of the two -- spread of +/-$332 across seed sets against 4's +/-$985, wins
+# 2 of 3 sets, and sits mid-plateau (4-6) rather than one step from the
+# drop-off at 3.
+MAX_ANIMALS = _tune("MAX_ANIMALS", 5)          # hard ceiling on the flock, all species combined
 ANIMALS_PER_UNIT = _tune("ANIMALS_PER_UNIT", 2.0)  # flock-slots per crew member
 ANIMAL_UPKEEP = _tune("ANIMAL_UPKEEP", 3.0)    # tile-equivalents of crew time per animal
 # Every top-leaderboard replay checked (episode 92349280 and 4 others via
