@@ -139,21 +139,7 @@ MAX_LAND_BUYS = _tune("MAX_LAND_BUYS", 1)
 # either -- exact ties both times. 1.0 = the original full-reserve
 # behaviour; left in for whoever revisits MAX_LAND_BUYS>=2 next.
 LAND_RESERVE_FRAC = _tune("LAND_RESERVE_FRAC", 1.0)
-# Sell-price floor: hold produce while its price is under this x base. 0.45
-# was never swept on its own. Re-swept 0.45/0.30/0.20/0.10 against a frozen
-# copy of the 728.1 build (48 games/point, 3 seed sets); the curve plateaus
-# from 0.20 down and 0.20 is the consistent pick:
-#
-#   seed0      1000    5000   12000     mean
-#   margin   +1,051    +905    +707     +888
-#   winrate     81%     65%     58%      68%
-#
-# Small but positive on every set, unlike the OPP_SUPPLY/QUAD_BONUS candidates
-# swept alongside it, which each won some sets and lost others. Mechanically:
-# a 0.45 floor holds stock waiting for a price that often never comes, and
-# unsold stock at season end is worth nothing. Effect is well inside the
-# ~20-point leaderboard noise floor -- expect no visible score jump.
-RESERVE_FRAC = _tune("RESERVE_FRAC", 0.20)   # hold while price < this x base
+RESERVE_FRAC = _tune("RESERVE_FRAC", 0.45)   # hold while price < this x base
 SEED_RATION = _tune("SEED_RATION", 6)        # per-turn cap on slow, pricey seeds
 # Assignment hysteresis: multiplies a (unit, job) pair's score when that unit
 # was already walking to that exact job last turn AND is within STICKY_RANGE
