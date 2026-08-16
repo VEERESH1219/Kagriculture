@@ -151,6 +151,16 @@ SEED_RATION = _tune("SEED_RATION", 6)        # per-turn cap on slow, pricey seed
 # decaying relative value evidently costs more in missed better options than
 # it saves in avoided switching. 0.0 keeps the original greedy-every-turn
 # behaviour exactly (multiplier 1x, no-op).
+# Replace the greedy (unit, job) claim loop with optimal bipartite matching.
+# Greedy sorts every pair by value/(dist+1) and claims in order, which is
+# myopic: it can send one unit across the farm for a marginally better job and
+# strand another with a long walk that a joint solution would have avoided.
+# actions.py measures 51.5% of unit-actions as MOVE, the largest block in the
+# season, so how work is allocated is worth more than any threshold on it.
+# 0 reproduces the 728.1 build exactly. OPT_ASSIGN_CAP bounds the job columns
+# fed to the solver, by value, to keep the turn well inside actTimeout.
+OPT_ASSIGN = _tune("OPT_ASSIGN", 2)
+OPT_ASSIGN_CAP = _tune("OPT_ASSIGN_CAP", 60)
 STICKY = _tune("STICKY", 0.0)
 STICKY_RANGE = _tune("STICKY_RANGE", 2)      # steps-from-target within which STICKY applies
 # Quadrant zoning: each unit gets a "home" quadrant (a stateless function of its
@@ -406,6 +416,69 @@ def step_toward(x, y, tx, ty):
 # self-play match (same callable for both seats, same process) can't cross-talk.
 # Reset at the top of a new episode so a stale key from a previous game can't
 # award an undeserved bonus.
+def _hungarian(cost):
+    """Rectangular assignment, minimising total cost. rows <= cols.
+
+    Jonker-Volgenant style shortest augmenting path, O(n^2 m). Pure stdlib --
+    the submission may not import scipy. n is the crew (<= 12) and m is capped
+    by the caller, so this stays far inside the 1000 ms actTimeout.
+
+    Returns a list `row -> col` (-1 when a row is left unassigned).
+    """
+    n = len(cost)
+    if n == 0:
+        return []
+    m = len(cost[0])
+    if m == 0:
+        return [-1] * n
+    INF = float("inf")
+    u = [0.0] * (n + 1)
+    v = [0.0] * (m + 1)
+    p = [0] * (m + 1)      # p[col] = row currently matched to col
+    way = [0] * (m + 1)
+    for i in range(1, n + 1):
+        p[0] = i
+        j0 = 0
+        minv = [INF] * (m + 1)
+        used = [False] * (m + 1)
+        while True:
+            used[j0] = True
+            i0 = p[j0]
+            delta = INF
+            j1 = 0
+            row = cost[i0 - 1]
+            for j in range(1, m + 1):
+                if used[j]:
+                    continue
+                cur = row[j - 1] - u[i0] - v[j]
+                if cur < minv[j]:
+                    minv[j] = cur
+                    way[j] = j0
+                if minv[j] < delta:
+                    delta = minv[j]
+                    j1 = j
+            if delta == INF:
+                break
+            for j in range(m + 1):
+                if used[j]:
+                    u[p[j]] += delta
+                    v[j] -= delta
+                else:
+                    minv[j] -= delta
+            j0 = j1
+            if p[j0] == 0:
+                break
+        while j0:
+            j1 = way[j0]
+            p[j0] = p[j1]
+            j0 = j1
+    out = [-1] * n
+    for j in range(1, m + 1):
+        if p[j] > 0:
+            out[p[j] - 1] = j - 1
+    return out
+
+
 _TARGETS = {}
 
 
@@ -961,6 +1034,67 @@ def _decide(obs):
                 score *= 1.0 + QUAD_BONUS
             pairs.append((score, idx, j))
     pairs.sort(key=lambda p: -p[0])
+
+    if OPT_ASSIGN and free:
+        # Optimal matching over the same eligible pairs the greedy loop uses.
+        # Objective is total net value (value, quadrant-adjusted, minus the
+        # walk priced at MOVE_COST) rather than greedy's per-pair ratio, so a
+        # unit will take a worse job when that frees a much better one for
+        # somebody else. Columns are capped at OPT_ASSIGN_CAP by value to bound
+        # the solve; anything beyond that is left to the greedy pass below.
+        # OPT_ASSIGN=1 maximises total net value; =2 maximises the total of
+        # greedy's own ratio score. The distinction matters more than the
+        # optimiser: net value charges a walk once in dollars, but a unit
+        # walking `dist` tiles is committed for `dist` turns, so the ratio
+        # value/(dist+1) is value-per-turn and prices that time. Mode 2
+        # therefore isolates whether greedy's myopia costs anything, holding
+        # its objective fixed.
+        net = {}
+        for score, idx, j in pairs:
+            if OPT_ASSIGN == 2:
+                net[(idx, j)] = score
+                continue
+            job = jobs[j]
+            dist = (abs(job["x"] - positions[idx][0])
+                    + abs(job["y"] - positions[idx][1]))
+            v = job["v"]
+            if _quadrant_of(job["x"], job["y"], size) == home_quadrant[idx]:
+                v *= 1.0 + QUAD_BONUS
+            net[(idx, j)] = v - dist * MOVE_COST
+
+        cand = sorted({j for _, _, j in pairs},
+                      key=lambda j: -jobs[j]["v"])[:OPT_ASSIGN_CAP]
+        rows = sorted(free)
+        if cand and rows:
+            BIG = 1e9
+            cost = [[-net.get((idx, j), -BIG) if (idx, j) in net else BIG
+                     for j in cand] for idx in rows]
+            for r, j_col in enumerate(_hungarian(cost)):
+                if j_col < 0 or cost[r][j_col] >= BIG:
+                    continue
+                idx = rows[r]
+                if idx not in free:
+                    continue
+                job = jobs[cand[j_col]]
+                if job["key"] in claimed:
+                    continue
+                op = job["a"][0]
+                if op == "PLANT":
+                    if plant_budget <= 0:
+                        continue
+                    plant_budget -= 1
+                elif op == "BUILD_COOP":
+                    if coop_budget <= 0:
+                        continue
+                    coop_budget -= 1
+                elif op == "BUILD_PASTURE":
+                    if pasture_budget <= 0:
+                        continue
+                    pasture_budget -= 1
+                assigned[idx] = (job["x"], job["y"], job["a"])
+                assigned_key[idx] = job["key"]
+                free.discard(idx)
+                claimed.add(job["key"])
 
     for _, idx, j in pairs:
         if idx not in free:
