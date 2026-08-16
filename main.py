@@ -179,7 +179,24 @@ QUAD_BONUS = _tune("QUAD_BONUS", 2.0)
 #
 # This is a trade, not a free win. Against a weak supplier the symmetric
 # assumption over-corrects: v12 costs $4.8k (still 100% winrate). Flat vs pass.
-OPP_SUPPLY = _tune("OPP_SUPPLY", 1.0)
+#
+# Re-swept with `poolsweep.py` against the calibrated varied pool (the sweep
+# above used a frozen copy of ourselves, which the project has since shown
+# does not predict the leaderboard -- see PROJECT_STATUS.md, Phase 13/14).
+# 0.5 over 5 independent seed sets, 180-216 games per point:
+#
+#   seed0     1000    5000   12000   21000   33000     mean
+#   winrate  +13.0   +6.1    -2.2    +1.9    +2.4     +4.2pp
+#   margin    -669  -1,336  -2,806     +17  -2,379   -$1,435
+#
+# The two metrics disagree: 0.5 wins 4/5 on winrate and loses 4/5 on margin.
+# Calibration rates both as equally good leaderboard predictors (Spearman
+# +0.900 each), so this is a genuine split, not one metric being wrong.
+# Shipped on winrate, because the public score is a win/loss skill rating
+# rather than a dollar total. Expect parity, not a visible jump: +4.2pp of
+# pool winrate is well inside the ~20-point leaderboard noise floor measured
+# in Phase 13 (two byte-identical builds scored 708.4 and 728.1).
+OPP_SUPPLY = _tune("OPP_SUPPLY", 0.5)
 HIRE_FLOOR = _tune("HIRE_FLOOR", 20)         # hands drive everything: never skip
 CASH_FLOOR = _tune("CASH_FLOOR", 150)
 # Phase 8 (2026-08-12): re-measured with cow/sheep added and quadrant zoning
