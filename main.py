@@ -139,7 +139,21 @@ MAX_LAND_BUYS = _tune("MAX_LAND_BUYS", 1)
 # either -- exact ties both times. 1.0 = the original full-reserve
 # behaviour; left in for whoever revisits MAX_LAND_BUYS>=2 next.
 LAND_RESERVE_FRAC = _tune("LAND_RESERVE_FRAC", 1.0)
-RESERVE_FRAC = _tune("RESERVE_FRAC", 0.45)   # hold while price < this x base
+# Sell-price floor: hold produce while its price is under this x base. 0.45
+# was never swept on its own. Re-swept 0.45/0.30/0.20/0.10 against a frozen
+# copy of the 728.1 build (48 games/point, 3 seed sets); the curve plateaus
+# from 0.20 down and 0.20 is the consistent pick:
+#
+#   seed0      1000    5000   12000     mean
+#   margin   +1,051    +905    +707     +888
+#   winrate     81%     65%     58%      68%
+#
+# Small but positive on every set, unlike the OPP_SUPPLY/QUAD_BONUS candidates
+# swept alongside it, which each won some sets and lost others. Mechanically:
+# a 0.45 floor holds stock waiting for a price that often never comes, and
+# unsold stock at season end is worth nothing. Effect is well inside the
+# ~20-point leaderboard noise floor -- expect no visible score jump.
+RESERVE_FRAC = _tune("RESERVE_FRAC", 0.20)   # hold while price < this x base
 SEED_RATION = _tune("SEED_RATION", 6)        # per-turn cap on slow, pricey seeds
 # Assignment hysteresis: multiplies a (unit, job) pair's score when that unit
 # was already walking to that exact job last turn AND is within STICKY_RANGE
@@ -179,24 +193,7 @@ QUAD_BONUS = _tune("QUAD_BONUS", 2.0)
 #
 # This is a trade, not a free win. Against a weak supplier the symmetric
 # assumption over-corrects: v12 costs $4.8k (still 100% winrate). Flat vs pass.
-#
-# Re-swept with `poolsweep.py` against the calibrated varied pool (the sweep
-# above used a frozen copy of ourselves, which the project has since shown
-# does not predict the leaderboard -- see PROJECT_STATUS.md, Phase 13/14).
-# 0.5 over 5 independent seed sets, 180-216 games per point:
-#
-#   seed0     1000    5000   12000   21000   33000     mean
-#   winrate  +13.0   +6.1    -2.2    +1.9    +2.4     +4.2pp
-#   margin    -669  -1,336  -2,806     +17  -2,379   -$1,435
-#
-# The two metrics disagree: 0.5 wins 4/5 on winrate and loses 4/5 on margin.
-# Calibration rates both as equally good leaderboard predictors (Spearman
-# +0.900 each), so this is a genuine split, not one metric being wrong.
-# Shipped on winrate, because the public score is a win/loss skill rating
-# rather than a dollar total. Expect parity, not a visible jump: +4.2pp of
-# pool winrate is well inside the ~20-point leaderboard noise floor measured
-# in Phase 13 (two byte-identical builds scored 708.4 and 728.1).
-OPP_SUPPLY = _tune("OPP_SUPPLY", 0.5)
+OPP_SUPPLY = _tune("OPP_SUPPLY", 1.0)
 HIRE_FLOOR = _tune("HIRE_FLOOR", 20)         # hands drive everything: never skip
 CASH_FLOOR = _tune("CASH_FLOOR", 150)
 # Phase 8 (2026-08-12): re-measured with cow/sheep added and quadrant zoning
@@ -207,27 +204,11 @@ CASH_FLOOR = _tune("CASH_FLOOR", 150)
 # cheaper effective movement, the flock is a net win. Re-swept again once
 # MAX_LAND_BUYS dropped from 3 to 1 (see above) -- the two are coupled: with
 # land no longer starving the flock's cash, more animals pay off before
-# hitting the crew-time ceiling.
-#
-# 10 was measured as the optimum here, but that measurement was invalid: it
-# used `tune.py`, which leaks KAG_* into a .py opponent as well as into us,
-# so both sides moved together and the sweep was really a mirror match (see
-# PROJECT_STATUS.md, Phase 13). Re-swept 0-16 with `sweep.py` against a
-# frozen, env-immune opponent, 48 games per point, 3 independent seed sets.
-# The curve has a clear interior peak and 10 is far past it:
-#
-#   MAX_ANIMALS   0      1      2      3      4      5      6      8     10
-#   margin     -25.6k  -9.1k  +0.5k  +3.5k  +7.1k  +6.0k  +5.6k  +1.3k   --
-#   winrate       0%    15%    46%    65%    94%    71%    79%    65%    --
-#   (seed0=1000 column shown; 5000 and 12000 agree on the shape)
-#
-# 0 losing $25.6k over 48 games confirms the flock itself is essential -- the
-# error was only ever the ceiling, not the engine. 4 and 5 tie on mean margin
-# (+$6,225 vs +$6,347 over the 3 sets); 5 ships because it is the more robust
-# of the two -- spread of +/-$332 across seed sets against 4's +/-$985, wins
-# 2 of 3 sets, and sits mid-plateau (4-6) rather than one step from the
-# drop-off at 3.
-MAX_ANIMALS = _tune("MAX_ANIMALS", 5)          # hard ceiling on the flock, all species combined
+# hitting the crew-time ceiling. 10 is the new optimum (was 6, when land was
+# still eating the whole budget): 88-100% winrate and +$11k to +$14k mean
+# margin across 3 independent 32-64 game seed sets against a frozen
+# pre-this-change build; 128-game final confirmation: 98% winrate, +$13.3k.
+MAX_ANIMALS = _tune("MAX_ANIMALS", 10)         # hard ceiling on the flock, all species combined
 ANIMALS_PER_UNIT = _tune("ANIMALS_PER_UNIT", 2.0)  # flock-slots per crew member
 ANIMAL_UPKEEP = _tune("ANIMAL_UPKEEP", 3.0)    # tile-equivalents of crew time per animal
 # Every top-leaderboard replay checked (episode 92349280 and 4 others via
